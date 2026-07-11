@@ -1,30 +1,30 @@
-# حاسبة الخسائر التفصيلية — PVsyst Detailed Losses Calculator
+# PVsyst Detailed Losses Calculator
 
-أداة لحساب كل بنود الخسائر التي يطلبها PVsyst في نافذة **Detailed Losses**، مع مخطط خسائر سنوي تقديري (Loss Diagram) من `GlobHor` حتى `E_Grid`.
+A tool that computes every loss item requested by PVsyst's **Detailed Losses** dialog, with an estimated annual loss diagram from `GlobHor` down to `E_Grid`.
 
-## الملفات
+## Files
 
-| الملف | الوصف |
+| File | Description |
 |---|---|
-| `pvsyst_losses_calculator.html` | تطبيق ويب تفاعلي — افتحه مباشرة في أي متصفح، بلا تثبيت. واجهة عربية، وضع فاتح/داكن، نسخ القيم أو تنزيلها CSV. |
-| `pvsyst_losses.py` | نفس المعادلات كوحدة Python للاستخدام البرمجي — `python3 pvsyst_losses.py` يطبع مخطط الخسائر. |
+| `pvsyst_losses_calculator.html` | Interactive web app — open it directly in any browser, no installation. Light/dark theme, copy values or download them as CSV. |
+| `pvsyst_losses.py` | The same equations as a Python module for programmatic use — `python3 pvsyst_losses.py` prints the loss diagram. |
 
-## البنود المحسوبة
+## Loss items covered
 
-- **خسائر الإشعاع**: حجب الأفق (Far shading)، التظليل القريب (Near shadings)، زاوية السقوط (IAM بنموذج ASHRAE)، الاتساخ (Soiling).
-- **الخسارة الحرارية**: نموذج U-value الخاص بـ PVsyst — `Tcell = Tamb + G·α·(1−η)/(Uc + Uv·v)` مع قوالب تركيب جاهزة (حر التهوية 29، شبه مدمج 20، مدمج 15 W/m²K).
-- **خسائر المصفوفة**: مستوى الإشعاع المنخفض، جودة الوحدات (قاعدة ربع فرق التفاوت)، LID، عدم التطابق Mismatch، تطابق جهد السلاسل، التقادم Ageing.
-- **الفقد الأومي DC**: نسبة مباشرة عند STC أو حاسبة كابلات كاملة (`R = ρ·2L/S`، نحاس/ألمنيوم) مع الفقد السنوي الفعّال.
-- **العاكس**: الكفاءة الأوروبية، قطع تجاوز القدرة (Clipping) مع مؤشر نسبة DC/AC، عتبة التشغيل.
-- **جانب AC**: فقد الكابلات (نسبة مباشرة أو حاسبة 3 أطوار)، محوّل الرفع (فقد الحديد 8760 ساعة + فقد النحاس التربيعي).
-- **المحطة**: الأحمال المساعدة، عدم الجاهزية، تقييد الشبكة.
+- **Irradiance losses**: far shading (horizon), near shadings, incidence angle (IAM, ASHRAE model), soiling.
+- **Thermal loss**: PVsyst's U-value model — `Tcell = Tamb + G·α·(1−η)/(Uc + Uv·v)` with mounting presets (free-standing 29, semi-integrated 20, insulated 15 W/m²K).
+- **Array losses**: low-light irradiance level, module quality (quarter-of-tolerance rule), LID, module mismatch, strings voltage mismatch, ageing.
+- **DC ohmic loss**: direct % at STC or a full cable calculator (`R = ρ·2L/S`, copper/aluminium) with the effective annual loss.
+- **Inverter**: European efficiency, overpower clipping with a DC/AC ratio indicator, power threshold.
+- **AC side**: cable loss (direct % or 3-phase calculator), MV step-up transformer (iron loss over 8760 h + quadratic copper loss).
+- **Plant level**: auxiliaries, unavailability, grid curtailment.
 
-## المخرجات
+## Outputs
 
-- قيمة كل بند جاهزة للإدخال في PVsyst مع موضعها في البرنامج (جدول قابل للنسخ/التنزيل).
-- مخطط الخسائر السنوي: `GlobHor → GlobEff → E_nom → E_Array → E_Inv → E_Grid`.
-- المؤشرات: الطاقة السنوية `E_Grid`، الإنتاجية النوعية (kWh/kWp)، معامل الأداء **PR**.
+- Each parameter value ready to enter in PVsyst, with its location in the program (copyable/downloadable table).
+- Annual loss diagram: `GlobHor → GlobEff → E_nom → E_Array → E_Inv → E_Grid`.
+- Indicators: annual energy `E_Grid`, specific yield (kWh/kWp), performance ratio **PR**.
 
-## ملاحظة منهجية
+## Methodology note
 
-يجري PVsyst محاكاة ساعية كاملة، بينما تستخدم هذه الأداة متوسطات سنوية مرجَّحة بالإنتاج — لذلك المخطط تقديري (عادة ضمن ±1–2%)، أما قيم البنود المدخلة (Uc، Soiling، Mismatch، الفقد الأومي عند STC…) فهي بالضبط ما يُدخل في البرنامج.
+PVsyst runs a full hourly simulation, while this tool uses production-weighted annual averages — so the diagram is an estimate (usually within ±1–2%). The individual parameter values (Uc, soiling, mismatch, DC ohmic at STC, …) are exactly what you enter in the program.

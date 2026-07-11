@@ -1,6 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>حاسبة خسائر PVsyst التفصيلية</title>
+<title>PVsyst Detailed Losses Calculator</title>
 <style>
   :root{
     --paper:#F7F5F1; --card:#FFFFFF; --ink:#22262B; --ink-2:#5B6068; --ink-3:#8A8F97;
@@ -41,23 +41,21 @@
   html{scroll-behavior:smooth}
   @media (prefers-reduced-motion: reduce){ html{scroll-behavior:auto} *{transition:none!important} }
   body{
-    margin:0; direction:rtl; background:var(--paper); color:var(--ink);
-    font-family:"Segoe UI","Noto Kufi Arabic","Noto Sans Arabic",Tahoma,Arial,sans-serif;
-    font-size:15px; line-height:1.65;
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:"Segoe UI",-apple-system,"Helvetica Neue",Arial,sans-serif;
+    font-size:15px; line-height:1.6;
   }
   .wrap{max-width:1180px; margin:0 auto; padding:28px 20px 80px}
   header.top{border-bottom:2px solid var(--ink); padding-bottom:18px; margin-bottom:22px}
-  .kicker{font-size:12px; letter-spacing:.14em; color:var(--accent); font-weight:700}
-  .kicker .en{letter-spacing:.2em}
-  h1{margin:6px 0 4px; font-size:clamp(22px,3.4vw,32px); line-height:1.3; text-wrap:balance}
-  .sub{color:var(--ink-2); max-width:62ch; margin:0}
-  .en{direction:ltr; unicode-bidi:isolate; font-feature-settings:"tnum"}
+  .kicker{font-size:12px; letter-spacing:.18em; color:var(--accent); font-weight:700}
+  h1{margin:6px 0 4px; font-size:clamp(22px,3.4vw,32px); line-height:1.25; text-wrap:balance}
+  .sub{color:var(--ink-2); max-width:68ch; margin:0}
 
   /* stat tiles */
   .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; margin:18px 0 26px}
   .tile{background:var(--tile); border:1px solid var(--hair); border-radius:6px; padding:12px 14px}
   .tile .lbl{font-size:11.5px; color:var(--ink-2); letter-spacing:.02em}
-  .tile .val{font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; direction:ltr; unicode-bidi:isolate; margin-top:2px}
+  .tile .val{font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; margin-top:2px}
   .tile .unit{font-size:12px; color:var(--ink-3); font-weight:400}
   .tile.hero{border-color:var(--accent); background:var(--accent-soft)}
   .tile.hero .val{color:var(--accent)}
@@ -78,8 +76,8 @@
   .card > summary .chev{margin-inline-start:auto; color:var(--ink-3); transition:transform .15s}
   .card[open] > summary .chev{transform:rotate(90deg)}
   .card h2{font-size:15px; margin:0; font-weight:700}
-  .card h2 .en{font-size:12px; color:var(--ink-3); font-weight:500}
-  .card .badge{font-size:11px; font-variant-numeric:tabular-nums; direction:ltr; unicode-bidi:isolate;
+  .card h2 small{font-size:12px; color:var(--ink-3); font-weight:500}
+  .card .badge{font-size:11px; font-variant-numeric:tabular-nums;
     background:var(--hair-2); color:var(--ink-2); border-radius:99px; padding:1px 9px}
   .body{padding:14px 16px 16px}
 
@@ -88,20 +86,17 @@
   @media (max-width:560px){ .grid2,.grid3{grid-template-columns:1fr} }
   .fld{display:flex; flex-direction:column; gap:3px; min-width:0}
   .fld label{font-size:12px; color:var(--ink-2)}
-  .fld label .en{color:var(--ink-3); font-size:11px}
   .fld input,.fld select{
     background:var(--field); color:var(--ink); border:1px solid var(--hair); border-radius:5px;
     padding:7px 10px; font:inherit; font-variant-numeric:tabular-nums; width:100%;
-    direction:ltr; text-align:left;
   }
-  .fld select{direction:rtl; text-align:right}
   .fld input:focus,.fld select:focus{outline:2px solid var(--focus); outline-offset:-1px; border-color:var(--focus)}
-  .hint{font-size:11.5px; color:var(--ink-3); margin:8px 0 0; line-height:1.6}
+  .hint{font-size:11.5px; color:var(--ink-3); margin:8px 0 0; line-height:1.55}
   .calcout{
     margin-top:10px; background:var(--hair-2); border-radius:6px; padding:8px 12px; font-size:13px;
     display:flex; flex-wrap:wrap; gap:6px 22px;
   }
-  .calcout b{font-variant-numeric:tabular-nums; direction:ltr; unicode-bidi:isolate}
+  .calcout b{font-variant-numeric:tabular-nums}
   .modeswitch{display:flex; gap:0; margin-bottom:12px; border:1px solid var(--hair); border-radius:6px; overflow:hidden; width:max-content}
   .modeswitch button{
     background:var(--card); color:var(--ink-2); border:0; padding:6px 14px; font:inherit; font-size:12.5px; cursor:pointer;
@@ -114,19 +109,18 @@
   .diagram h2{font-size:15px; margin:0 0 2px}
   .diagram .note{font-size:11.5px; color:var(--ink-3); margin:0 0 12px}
   .wf{display:flex; flex-direction:column}
-  .wf-row{display:grid; grid-template-columns:minmax(110px,150px) 1fr 74px; gap:8px; align-items:center;
-    padding:3px 4px; border-radius:4px; min-height:26px}
+  .wf-row{display:grid; grid-template-columns:minmax(120px,170px) 1fr 74px; gap:8px; align-items:center;
+    padding:3px 4px; border-radius:4px; min-height:24px}
   .wf-row:hover{background:var(--hair-2)}
-  .wf-lbl{font-size:12px; color:var(--ink-2); line-height:1.35}
-  .wf-lbl .en{display:block; font-size:10.5px; color:var(--ink-3)}
-  .wf-barcell{position:relative; height:16px; direction:ltr}
-  .wf-bar{position:absolute; inset-block:0; inset-inline-start:0; background:var(--bar); border-radius:0 4px 4px 0; min-width:2px}
+  .wf-lbl{font-size:12px; color:var(--ink-2); line-height:1.3}
+  .wf-barcell{position:relative; height:16px}
+  .wf-bar{position:absolute; inset-block:0; left:0; background:var(--bar); border-radius:0 4px 4px 0; min-width:2px}
   .wf-bar.head{background:var(--accent)}
-  .wf-delta{font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; direction:ltr; unicode-bidi:isolate; text-align:left}
+  .wf-delta{font-size:12px; font-weight:600; font-variant-numeric:tabular-nums; text-align:right}
   .wf-delta.neg{color:var(--loss)} .wf-delta.pos{color:var(--gain)} .wf-delta.zero{color:var(--ink-3)}
   .wf-stage{margin:8px 0 4px; padding:5px 4px 3px; border-top:1px dashed var(--hair); display:flex; justify-content:space-between; align-items:baseline; gap:10px}
   .wf-stage .nm{font-size:12px; font-weight:700; color:var(--ink)}
-  .wf-stage .qty{font-size:12px; color:var(--ink-2); font-variant-numeric:tabular-nums; direction:ltr; unicode-bidi:isolate}
+  .wf-stage .qty{font-size:12px; color:var(--ink-2); font-variant-numeric:tabular-nums}
 
   /* values table */
   .vals{background:var(--card); border:1px solid var(--hair); border-radius:8px; padding:16px}
@@ -134,188 +128,188 @@
   .vals .note{font-size:11.5px; color:var(--ink-3); margin:0 0 10px}
   .tblwrap{overflow-x:auto}
   table{border-collapse:collapse; width:100%; font-size:12.5px}
-  th{font-size:11px; color:var(--ink-3); text-align:right; font-weight:600; padding:5px 8px; border-bottom:1px solid var(--hair)}
+  th{font-size:11px; color:var(--ink-3); text-align:left; font-weight:600; padding:5px 8px; border-bottom:1px solid var(--hair)}
   td{padding:5px 8px; border-bottom:1px solid var(--hair-2); vertical-align:top}
-  td.num{font-variant-numeric:tabular-nums; direction:ltr; unicode-bidi:isolate; text-align:left; font-weight:600; white-space:nowrap}
-  td .en{font-size:11px; color:var(--ink-3); display:block}
+  td.num{font-variant-numeric:tabular-nums; font-weight:600; white-space:nowrap}
+  td .loc{font-size:11px; color:var(--ink-3)}
   .btnrow{display:flex; gap:8px; margin-top:12px; flex-wrap:wrap}
   .btn{background:var(--accent); border:1px solid var(--accent); color:#fff; border-radius:5px; padding:7px 16px; font:inherit; font-size:13px; font-weight:600; cursor:pointer}
   .btn.ghost{background:transparent; color:var(--accent)}
   .btn:focus-visible{outline:2px solid var(--focus); outline-offset:2px}
-  footer{margin-top:34px; color:var(--ink-3); font-size:12px; border-top:1px solid var(--hair); padding-top:14px; max-width:75ch}
+  footer{margin-top:34px; color:var(--ink-3); font-size:12px; border-top:1px solid var(--hair); padding-top:14px; max-width:80ch}
 </style>
 
 <div class="wrap">
 <header class="top">
-  <div class="kicker">أداة هندسية · <span class="en">SOLAR PV ENGINEERING</span></div>
-  <h1>حاسبة الخسائر التفصيلية <span class="en" style="font-weight:600">— PVsyst Detailed Losses</span></h1>
-  <p class="sub">احسب كل بنود الخسائر التي يطلبها PVsyst في نافذة <span class="en">Detailed Losses</span>، وشاهد مخطط الخسائر السنوي التقديري. القيم الافتراضية مطابقة لتوصيات PVsyst — عدّل ما يلزم فقط، ثم انسخ القيم من الجدول إلى البرنامج.</p>
+  <div class="kicker">SOLAR PV ENGINEERING TOOL</div>
+  <h1>PVsyst Detailed Losses Calculator</h1>
+  <p class="sub">Compute every loss item requested by PVsyst's <b>Detailed Losses</b> dialog and preview the estimated annual loss diagram. Defaults match PVsyst recommendations — adjust only what you need, then copy the values from the table into the program.</p>
 </header>
 
 <div class="tiles" id="tiles">
-  <div class="tile hero"><div class="lbl">الطاقة المسلَّمة للشبكة <span class="en">E_Grid</span></div><div class="val" id="tEgrid">—</div><div class="unit en">kWh/yr</div></div>
-  <div class="tile"><div class="lbl">الإنتاجية النوعية <span class="en">Specific Yield</span></div><div class="val" id="tYield">—</div><div class="unit en">kWh/kWp/yr</div></div>
-  <div class="tile"><div class="lbl">معامل الأداء <span class="en">PR</span></div><div class="val" id="tPR">—</div><div class="unit en">%</div></div>
-  <div class="tile"><div class="lbl">إجمالي الخسائر بعد التحويل</div><div class="val" id="tLoss">—</div><div class="unit en">%</div></div>
+  <div class="tile hero"><div class="lbl">Energy injected into grid — E_Grid</div><div class="val" id="tEgrid">—</div><div class="unit">kWh/yr</div></div>
+  <div class="tile"><div class="lbl">Specific yield</div><div class="val" id="tYield">—</div><div class="unit">kWh/kWp/yr</div></div>
+  <div class="tile"><div class="lbl">Performance ratio — PR</div><div class="val" id="tPR">—</div><div class="unit">%</div></div>
+  <div class="tile"><div class="lbl">Total losses after STC conversion</div><div class="val" id="tLoss">—</div><div class="unit">%</div></div>
 </div>
 
 <div class="cols">
 <div class="inputs">
 
   <details class="card" open>
-    <summary><h2>النظام والموقع <span class="en">System &amp; Site</span></h2><span class="chev">‹</span></summary>
+    <summary><h2>System &amp; site</h2><span class="chev">›</span></summary>
     <div class="body">
       <div class="grid3">
-        <div class="fld"><label>القدرة الاسمية DC <span class="en">Pnom (kWp)</span></label><input id="pnom" type="number" step="any" value="100"></div>
-        <div class="fld"><label>الإشعاع الأفقي السنوي <span class="en">GlobHor (kWh/m²·yr)</span></label><input id="ghi" type="number" step="any" value="2000"></div>
-        <div class="fld"><label>كسب الإمالة على المستوى المائل <span class="en">Transposition (%)</span></label><input id="transp" type="number" step="any" value="15"></div>
-        <div class="fld"><label>كفاءة الوحدة عند STC <span class="en">η module (%)</span></label><input id="eta" type="number" step="any" value="21"></div>
-        <div class="fld"><label>معامل حرارة القدرة <span class="en">γ Pmpp (%/°C)</span></label><input id="gamma" type="number" step="any" value="0.34"></div>
-        <div class="fld"><label>قدرة العاكس الاسمية AC <span class="en">Pnom AC (kW)</span></label><input id="pac" type="number" step="any" value="80"></div>
+        <div class="fld"><label>Nominal DC power — Pnom (kWp)</label><input id="pnom" type="number" step="any" value="100"></div>
+        <div class="fld"><label>Annual horizontal irradiation — GlobHor (kWh/m²·yr)</label><input id="ghi" type="number" step="any" value="2000"></div>
+        <div class="fld"><label>Transposition gain to plane (%)</label><input id="transp" type="number" step="any" value="15"></div>
+        <div class="fld"><label>Module efficiency at STC — η (%)</label><input id="eta" type="number" step="any" value="21"></div>
+        <div class="fld"><label>Power temp. coefficient — γ Pmpp (%/°C)</label><input id="gamma" type="number" step="any" value="0.34"></div>
+        <div class="fld"><label>Inverter nominal AC power (kW)</label><input id="pac" type="number" step="any" value="80"></div>
       </div>
-      <p class="hint">أدخل معامل الحرارة كقيمة موجبة (نسبة انخفاض القدرة لكل درجة فوق 25°C). كسب الإمالة تجده في PVsyst من مقارنة <span class="en">GlobInc/GlobHor</span> أو من جداول الأرصاد للموقع.</p>
+      <p class="hint">Enter γ as a positive value (power drop per °C above 25 °C). The transposition gain is the GlobInc/GlobHor ratio for your site's tilt and azimuth — read it from PVsyst's meteo tables or a first quick simulation.</p>
     </div>
   </details>
 
   <details class="card" open>
-    <summary><h2>خسائر الإشعاع الضوئية <span class="en">Irradiance losses</span></h2><span class="badge" id="bOpt">—</span><span class="chev">‹</span></summary>
+    <summary><h2>Irradiance losses</h2><span class="badge" id="bOpt">—</span><span class="chev">›</span></summary>
     <div class="body">
       <div class="grid2">
-        <div class="fld"><label>حجب الأفق / التظليل البعيد <span class="en">Far shading – Horizon (%)</span></label><input id="far" type="number" step="any" value="0"></div>
-        <div class="fld"><label>التظليل القريب <span class="en">Near shadings (%)</span></label><input id="near" type="number" step="any" value="1.5"></div>
-        <div class="fld"><label>خسارة زاوية السقوط <span class="en">IAM loss (%)</span></label><input id="iam" type="number" step="any" value="2.5"></div>
-        <div class="fld"><label>الاتساخ <span class="en">Soiling (%)</span></label><input id="soil" type="number" step="any" value="3"></div>
+        <div class="fld"><label>Far shading — horizon (%)</label><input id="far" type="number" step="any" value="0"></div>
+        <div class="fld"><label>Near shadings (%)</label><input id="near" type="number" step="any" value="1.5"></div>
+        <div class="fld"><label>IAM loss (%)</label><input id="iam" type="number" step="any" value="2.5"></div>
+        <div class="fld"><label>Soiling (%)</label><input id="soil" type="number" step="any" value="3"></div>
       </div>
-      <p class="hint">IAM بنموذج ASHRAE: <span class="en">F = 1 − b₀·(1/cosθ − 1)</span> مع <span class="en">b₀ = 0.05</span> افتراضياً؛ الخسارة السنوية النمطية لسطح مائل ثابت ≈ 2–3%. الاتساخ: 2–3% مناخ معتدل، 4–6% مناطق صحراوية غبارية دون غسيل منتظم.</p>
+      <p class="hint">IAM uses the ASHRAE model F = 1 − b₀·(1/cosθ − 1) with b₀ = 0.05 by default; the typical annual loss for a fixed tilted plane is 2–3%. Soiling: 2–3% temperate climate, 4–6% dusty desert sites without regular cleaning.</p>
     </div>
   </details>
 
   <details class="card" open>
-    <summary><h2>الخسارة الحرارية <span class="en">Thermal loss — U-value model</span></h2><span class="badge" id="bTherm">—</span><span class="chev">‹</span></summary>
+    <summary><h2>Thermal loss <small>— U-value model</small></h2><span class="badge" id="bTherm">—</span><span class="chev">›</span></summary>
     <div class="body">
       <div class="grid3">
-        <div class="fld"><label>نوع التركيب <span class="en">Mounting</span></label>
+        <div class="fld"><label>Mounting type</label>
           <select id="mount">
-            <option value="29,0">حر التهوية (أرضي/مسافات) — Uc=29</option>
-            <option value="20,0" selected>شبه مدمج بتهوية خلفية — Uc=20</option>
-            <option value="15,0">مدمج بلا تهوية خلفية — Uc=15</option>
-            <option value="custom">مخصّص…</option>
+            <option value="29,0">Free-standing, air all around — Uc=29</option>
+            <option value="20,0" selected>Semi-integrated, back ventilation — Uc=20</option>
+            <option value="15,0">Fully insulated back — Uc=15</option>
+            <option value="custom">Custom…</option>
           </select>
         </div>
-        <div class="fld"><label>معامل حراري ثابت <span class="en">Uc (W/m²·K)</span></label><input id="uc" type="number" step="any" value="20"></div>
-        <div class="fld"><label>معامل الرياح <span class="en">Uv (W/m²·K / m/s)</span></label><input id="uv" type="number" step="any" value="0"></div>
-        <div class="fld"><label>متوسط حرارة الهواء أثناء الإنتاج <span class="en">T amb (°C)</span></label><input id="tamb" type="number" step="any" value="25"></div>
-        <div class="fld"><label>متوسط الإشعاع على المستوى <span class="en">G inc (W/m²)</span></label><input id="gavg" type="number" step="any" value="600"></div>
-        <div class="fld"><label>سرعة الرياح المتوسطة <span class="en">v (m/s)</span></label><input id="wind" type="number" step="any" value="1.5"></div>
+        <div class="fld"><label>Constant loss factor — Uc (W/m²·K)</label><input id="uc" type="number" step="any" value="20"></div>
+        <div class="fld"><label>Wind loss factor — Uv (W/m²·K per m/s)</label><input id="uv" type="number" step="any" value="0"></div>
+        <div class="fld"><label>Avg. ambient temp. during production (°C)</label><input id="tamb" type="number" step="any" value="25"></div>
+        <div class="fld"><label>Avg. irradiance in plane — G inc (W/m²)</label><input id="gavg" type="number" step="any" value="600"></div>
+        <div class="fld"><label>Average wind speed — v (m/s)</label><input id="wind" type="number" step="any" value="1.5"></div>
       </div>
       <div class="calcout">
-        <span>حرارة الخلية المتوسطة: <b id="oTcell">—</b> °C</span>
-        <span>الخسارة الحرارية: <b id="oTherm">—</b> %</span>
+        <span>Average cell temperature: <b id="oTcell">—</b> °C</span>
+        <span>Thermal loss: <b id="oTherm">—</b> %</span>
       </div>
-      <p class="hint">نموذج PVsyst: <span class="en">T cell = T amb + G·α·(1−η)/(Uc + Uv·v)</span> مع امتصاصية α = 0.9. استخدم متوسطات مرجَّحة بالإنتاج (منتصف النهار) وليس المتوسط اليومي. القيمة المدخلة في PVsyst هي Uc وUv نفسهما — الخسارة % هنا تقديرية للمخطط.</p>
+      <p class="hint">PVsyst model: T cell = T amb + G·α·(1−η)/(Uc + Uv·v) with absorptivity α = 0.9. Use production-weighted (midday) averages, not daily means. The values you enter in PVsyst are Uc and Uv themselves — the loss % here is only for this diagram's estimate.</p>
     </div>
   </details>
 
   <details class="card" open>
-    <summary><h2>خسائر المصفوفة <span class="en">Module &amp; array losses</span></h2><span class="badge" id="bArr">—</span><span class="chev">‹</span></summary>
+    <summary><h2>Module &amp; array losses</h2><span class="badge" id="bArr">—</span><span class="chev">›</span></summary>
     <div class="body">
       <div class="grid2">
-        <div class="fld"><label>خسارة مستوى الإشعاع المنخفض <span class="en">Irradiance level (%)</span></label><input id="lowirr" type="number" step="any" value="0.6"></div>
-        <div class="fld"><label>جودة الوحدات <span class="en">Module quality (%)</span></label><input id="quality" type="number" step="any" value="-0.75"></div>
-        <div class="fld"><label>التدهور الضوئي الأولي <span class="en">LID (%)</span></label><input id="lid" type="number" step="any" value="2"></div>
-        <div class="fld"><label>عدم التطابق بين الوحدات <span class="en">Mismatch (%)</span></label><input id="mismatch" type="number" step="any" value="2"></div>
-        <div class="fld"><label>عدم تطابق جهد السلاسل <span class="en">Strings mismatch (%)</span></label><input id="smismatch" type="number" step="any" value="0.15"></div>
-        <div class="fld"><label>التقادم — معدل سنوي <span class="en">Ageing (%/yr)</span></label><input id="aging" type="number" step="any" value="0.4"></div>
-        <div class="fld"><label>سنة التشغيل للمحاكاة <span class="en">Year N</span></label><input id="year" type="number" step="1" min="1" value="1"></div>
+        <div class="fld"><label>Irradiance level (low-light) loss (%)</label><input id="lowirr" type="number" step="any" value="0.6"></div>
+        <div class="fld"><label>Module quality loss (%)</label><input id="quality" type="number" step="any" value="-0.75"></div>
+        <div class="fld"><label>Light-induced degradation — LID (%)</label><input id="lid" type="number" step="any" value="2"></div>
+        <div class="fld"><label>Module mismatch (%)</label><input id="mismatch" type="number" step="any" value="2"></div>
+        <div class="fld"><label>Strings voltage mismatch (%)</label><input id="smismatch" type="number" step="any" value="0.15"></div>
+        <div class="fld"><label>Ageing — annual rate (%/yr)</label><input id="aging" type="number" step="any" value="0.4"></div>
+        <div class="fld"><label>Simulation year — N</label><input id="year" type="number" step="1" min="1" value="1"></div>
       </div>
-      <p class="hint">جودة الوحدات: قاعدة PVsyst الافتراضية = ربع فرق حدَّي التفاوت؛ لوحدات بتفاوت <span class="en">0/+3%</span> تكون <span class="en">−0.75%</span> (القيمة السالبة تعني ربحاً). LID للسيليكون أحادي البلورة PERC ‏1–2%، ولتقنيات TOPCon/HJT ‏0–0.5%. Mismatch الافتراضي في PVsyst ‏2% (وحدات حديثة مفروزة: 0.5–1%). خسارة التقادم للسنة N = المعدل × (N−1).</p>
+      <p class="hint">Module quality: PVsyst's default rule is a quarter of the tolerance spread; for 0/+3% sorted modules that gives −0.75% (a negative value is a gain). LID: 1–2% for mono PERC, 0–0.5% for TOPCon/HJT. Mismatch: PVsyst default 2% (modern binned modules 0.5–1%). Ageing loss for year N = rate × (N−1).</p>
     </div>
   </details>
 
   <details class="card" open>
-    <summary><h2>الفقد الأومي DC <span class="en">Ohmic wiring loss</span></h2><span class="badge" id="bDC">—</span><span class="chev">‹</span></summary>
+    <summary><h2>DC ohmic wiring loss</h2><span class="badge" id="bDC">—</span><span class="chev">›</span></summary>
     <div class="body">
-      <div class="modeswitch" role="group" aria-label="طريقة إدخال الفقد الأومي DC">
-        <button id="dcModeDirect" aria-pressed="true">نسبة مباشرة</button>
-        <button id="dcModeCalc" aria-pressed="false">حاسبة الكابلات</button>
+      <div class="modeswitch" role="group" aria-label="DC ohmic input method">
+        <button id="dcModeDirect" aria-pressed="true">Direct %</button>
+        <button id="dcModeCalc" aria-pressed="false">Cable calculator</button>
       </div>
       <div id="dcDirect" class="grid2">
-        <div class="fld"><label>الفقد الأومي عند STC <span class="en">Loss at STC (%)</span></label><input id="dcpct" type="number" step="any" value="1.5"></div>
+        <div class="fld"><label>Ohmic loss at STC (%)</label><input id="dcpct" type="number" step="any" value="1.5"></div>
       </div>
       <div id="dcCalc" class="grid3" hidden>
-        <div class="fld"><label>مادة الموصل <span class="en">Material</span></label>
-          <select id="dcmat"><option value="0.0172">نحاس Cu</option><option value="0.0282">ألمنيوم Al</option></select></div>
-        <div class="fld"><label>طول الكابل باتجاه واحد <span class="en">L (m)</span></label><input id="dclen" type="number" step="any" value="40"></div>
-        <div class="fld"><label>مقطع الكابل <span class="en">S (mm²)</span></label><input id="dcsec" type="number" step="any" value="6"></div>
-        <div class="fld"><label>عدد الوحدات في السلسلة <span class="en">Modules/string</span></label><input id="nmods" type="number" step="1" value="26"></div>
-        <div class="fld"><label>جهد الوحدة عند MPP <span class="en">Vmp (V)</span></label><input id="vmp" type="number" step="any" value="34.5"></div>
-        <div class="fld"><label>تيار الوحدة عند MPP <span class="en">Imp (A)</span></label><input id="imp" type="number" step="any" value="13.2"></div>
+        <div class="fld"><label>Conductor material</label>
+          <select id="dcmat"><option value="0.0172">Copper (Cu)</option><option value="0.0282">Aluminium (Al)</option></select></div>
+        <div class="fld"><label>One-way cable length — L (m)</label><input id="dclen" type="number" step="any" value="40"></div>
+        <div class="fld"><label>Cross-section — S (mm²)</label><input id="dcsec" type="number" step="any" value="6"></div>
+        <div class="fld"><label>Modules per string</label><input id="nmods" type="number" step="1" value="26"></div>
+        <div class="fld"><label>Module Vmp (V)</label><input id="vmp" type="number" step="any" value="34.5"></div>
+        <div class="fld"><label>Module Imp (A)</label><input id="imp" type="number" step="any" value="13.2"></div>
       </div>
       <div class="grid2" style="margin-top:10px">
-        <div class="fld"><label>معامل التشغيل السنوي <span class="en">Annual duty factor</span></label><input id="dcduty" type="number" step="any" value="0.53"></div>
+        <div class="fld"><label>Annual duty factor (quadratic scaling)</label><input id="dcduty" type="number" step="any" value="0.53"></div>
       </div>
       <div class="calcout">
-        <span>الفقد عند STC (القيمة لـ PVsyst): <b id="oDCstc">—</b> %</span>
-        <span>الفقد السنوي الفعّال التقديري: <b id="oDCyr">—</b> %</span>
-        <span id="oDCr" hidden>مقاومة السلسلة: <b id="oDCrv">—</b> Ω</span>
+        <span>Loss at STC (value for PVsyst): <b id="oDCstc">—</b> %</span>
+        <span>Estimated effective annual loss: <b id="oDCyr">—</b> %</span>
+        <span id="oDCr" hidden>String resistance: <b id="oDCrv">—</b> Ω</span>
       </div>
-      <p class="hint">المقاومة <span class="en">R = ρ·2L/S</span> (ذهاب وإياب)، والفقد عند STC = <span class="en">I·R/V string</span>. أدخل في PVsyst القيمة عند STC — البرنامج يطبّق بنفسه التدرّج التربيعي مع التيار؛ المعامل السنوي (≈0.5–0.6) هنا فقط لتقدير المخطط.</p>
+      <p class="hint">Resistance R = ρ·2L/S (out and back); loss at STC = I·R/V string. Enter the STC value in PVsyst — the program applies its own quadratic scaling with current over the year; the duty factor (≈0.5–0.6) is used here only to estimate the diagram.</p>
     </div>
   </details>
 
   <details class="card" open>
-    <summary><h2>العاكس <span class="en">Inverter losses</span></h2><span class="badge" id="bInv">—</span><span class="chev">‹</span></summary>
+    <summary><h2>Inverter losses</h2><span class="badge" id="bInv">—</span><span class="chev">›</span></summary>
     <div class="body">
       <div class="grid3">
-        <div class="fld"><label>الكفاءة الأوروبية <span class="en">Euro efficiency (%)</span></label><input id="etainv" type="number" step="any" value="98"></div>
-        <div class="fld"><label>خسارة تجاوز القدرة (القطع) <span class="en">Clipping (%)</span></label><input id="clip" type="number" step="any" value="0.5"></div>
-        <div class="fld"><label>عتبة التشغيل والاستهلاك الليلي <span class="en">Threshold (%)</span></label><input id="thresh" type="number" step="any" value="0.02"></div>
+        <div class="fld"><label>European efficiency (%)</label><input id="etainv" type="number" step="any" value="98"></div>
+        <div class="fld"><label>Overpower clipping loss (%)</label><input id="clip" type="number" step="any" value="0.5"></div>
+        <div class="fld"><label>Power threshold / night consumption (%)</label><input id="thresh" type="number" step="any" value="0.02"></div>
       </div>
-      <p class="hint">خسارة القطع تعتمد على نسبة <span class="en">DC/AC</span>: حتى ‏1.1 ≈ 0%، ‏1.25 ≈ 0.5–1.5%، ‏1.4 ≈ 2–4% حسب الموقع. نسبة DC/AC الحالية من مدخلاتك: <b class="en" id="oDCAC">—</b>.</p>
+      <p class="hint">Clipping depends on the DC/AC ratio: up to 1.1 ≈ 0%, 1.25 ≈ 0.5–1.5%, 1.4 ≈ 2–4% depending on the site. Current DC/AC ratio from your inputs: <b id="oDCAC">—</b>.</p>
     </div>
   </details>
 
   <details class="card">
-    <summary><h2>جانب التيار المتردد والمحوّل <span class="en">AC &amp; transformer</span></h2><span class="badge" id="bAC">—</span><span class="chev">‹</span></summary>
+    <summary><h2>AC side &amp; transformer</h2><span class="badge" id="bAC">—</span><span class="chev">›</span></summary>
     <div class="body">
-      <div class="modeswitch" role="group" aria-label="طريقة إدخال فقد AC">
-        <button id="acModeDirect" aria-pressed="true">نسبة مباشرة</button>
-        <button id="acModeCalc" aria-pressed="false">حاسبة الكابلات (3 أطوار)</button>
+      <div class="modeswitch" role="group" aria-label="AC ohmic input method">
+        <button id="acModeDirect" aria-pressed="true">Direct %</button>
+        <button id="acModeCalc" aria-pressed="false">Cable calculator (3-phase)</button>
       </div>
       <div id="acDirect" class="grid2">
-        <div class="fld"><label>فقد كابلات AC <span class="en">AC ohmic (%)</span></label><input id="acpct" type="number" step="any" value="0.5"></div>
+        <div class="fld"><label>AC wiring loss (%)</label><input id="acpct" type="number" step="any" value="0.5"></div>
       </div>
       <div id="acCalc" class="grid3" hidden>
-        <div class="fld"><label>مادة الموصل <span class="en">Material</span></label>
-          <select id="acmat"><option value="0.0172">نحاس Cu</option><option value="0.0282">ألمنيوم Al</option></select></div>
-        <div class="fld"><label>طول الخط <span class="en">L (m)</span></label><input id="aclen" type="number" step="any" value="60"></div>
-        <div class="fld"><label>مقطع الموصل/طور <span class="en">S (mm²)</span></label><input id="acsec" type="number" step="any" value="50"></div>
-        <div class="fld"><label>جهد الخط <span class="en">V L-L (V)</span></label><input id="vll" type="number" step="any" value="400"></div>
-        <div class="fld"><label>معامل القدرة <span class="en">cos φ</span></label><input id="cosphi" type="number" step="any" value="1"></div>
+        <div class="fld"><label>Conductor material</label>
+          <select id="acmat"><option value="0.0172">Copper (Cu)</option><option value="0.0282">Aluminium (Al)</option></select></div>
+        <div class="fld"><label>Line length — L (m)</label><input id="aclen" type="number" step="any" value="60"></div>
+        <div class="fld"><label>Cross-section per phase — S (mm²)</label><input id="acsec" type="number" step="any" value="50"></div>
+        <div class="fld"><label>Line voltage — V L-L (V)</label><input id="vll" type="number" step="any" value="400"></div>
+        <div class="fld"><label>Power factor — cos φ</label><input id="cosphi" type="number" step="any" value="1"></div>
       </div>
       <div class="grid3" style="margin-top:12px">
-        <div class="fld"><label>محوّل رفع؟ <span class="en">MV transformer</span></label>
-          <select id="hastx"><option value="0" selected>لا يوجد</option><option value="1">يوجد</option></select></div>
-        <div class="fld"><label>فقد الحديد (دائم) <span class="en">Iron loss P₀ (kW)</span></label><input id="txiron" type="number" step="any" value="1.1" disabled></div>
-        <div class="fld"><label>فقد النحاس عند الحمل الاسمي <span class="en">Copper Pcc (kW)</span></label><input id="txcu" type="number" step="any" value="9.5" disabled></div>
+        <div class="fld"><label>MV step-up transformer</label>
+          <select id="hastx"><option value="0" selected>None</option><option value="1">Present</option></select></div>
+        <div class="fld"><label>Iron loss (permanent) — P₀ (kW)</label><input id="txiron" type="number" step="any" value="1.1" disabled></div>
+        <div class="fld"><label>Copper loss at nominal — Pcc (kW)</label><input id="txcu" type="number" step="any" value="9.5" disabled></div>
       </div>
       <div class="calcout">
-        <span>فقد AC عند القدرة الاسمية: <b id="oACstc">—</b> %</span>
-        <span>فقد المحوّل السنوي: <b id="oTX">—</b> %</span>
+        <span>AC loss at nominal power: <b id="oACstc">—</b> %</span>
+        <span>Annual transformer loss: <b id="oTX">—</b> %</span>
       </div>
-      <p class="hint">فقد الحديد يعمل 8760 ساعة/سنة ولو ليلاً (ما دام المحوّل موصولاً)، لذا نسبته السنوية = <span class="en">P₀×8760/E AC</span>. فقد النحاس يتدرّج تربيعياً مع الحمل (معامل سنوي ≈ 0.55 من قيمته الاسمية).</p>
+      <p class="hint">Iron loss runs 8760 h/yr — even at night while the transformer stays connected — so its annual share is P₀×8760/E AC. Copper loss scales quadratically with load (annual factor ≈ 0.55 of its nominal value).</p>
     </div>
   </details>
 
   <details class="card">
-    <summary><h2>خسائر على مستوى المحطة <span class="en">System losses</span></h2><span class="badge" id="bSys">—</span><span class="chev">‹</span></summary>
+    <summary><h2>System losses</h2><span class="badge" id="bSys">—</span><span class="chev">›</span></summary>
     <div class="body">
       <div class="grid3">
-        <div class="fld"><label>الأحمال المساعدة <span class="en">Auxiliaries (%)</span></label><input id="aux" type="number" step="any" value="0.3"></div>
-        <div class="fld"><label>عدم الجاهزية <span class="en">Unavailability (%)</span></label><input id="unavail" type="number" step="any" value="2"></div>
-        <div class="fld"><label>تقييد الشبكة <span class="en">Grid curtailment (%)</span></label><input id="curtail" type="number" step="any" value="0"></div>
+        <div class="fld"><label>Auxiliaries (%)</label><input id="aux" type="number" step="any" value="0.3"></div>
+        <div class="fld"><label>Unavailability (% of time)</label><input id="unavail" type="number" step="any" value="2"></div>
+        <div class="fld"><label>Grid curtailment (%)</label><input id="curtail" type="number" step="any" value="0"></div>
       </div>
-      <p class="hint">الأحمال المساعدة: مراوح تبريد، مراقبة، إنارة (0.2–0.5% نمطياً). عدم الجاهزية: افتراضي PVsyst ‏2% من الوقت (≈ 7.3 أيام/سنة) — أثره على الطاقة يعتمد على توقيت الأعطال، والتقريب هنا يعتبره متناسباً.</p>
+      <p class="hint">Auxiliaries: cooling fans, monitoring, lighting (typically 0.2–0.5%). Unavailability: PVsyst default 2% of time (≈ 7.3 days/yr) — the energy impact depends on when outages happen; this estimate treats it as proportional.</p>
     </div>
   </details>
 
@@ -323,30 +317,30 @@
 
 <div class="results">
   <div class="diagram">
-    <h2>مخطط الخسائر السنوي <span class="en" style="font-size:12px;color:var(--ink-3)">Loss diagram</span></h2>
-    <p class="note">كل شريط يمثّل الطاقة المتبقية بعد البند؛ النسبة على اليسار هي أثر البند نفسه.</p>
+    <h2>Annual loss diagram</h2>
+    <p class="note">Each bar is the energy remaining after that item; the figure on the right is the item's own effect.</p>
     <div class="wf" id="wf"></div>
   </div>
 
   <div class="vals">
-    <h2>القيم الجاهزة للإدخال في PVsyst</h2>
-    <p class="note">انسخ كل قيمة إلى موضعها في نافذة <span class="en">Detailed Losses</span>.</p>
+    <h2>Values ready to enter in PVsyst</h2>
+    <p class="note">Copy each value to its place in the <b>Detailed Losses</b> dialog.</p>
     <div class="tblwrap">
       <table id="valtable">
-        <thead><tr><th>البند</th><th>القيمة</th><th>موضعه في PVsyst</th></tr></thead>
+        <thead><tr><th>Parameter</th><th>Value</th><th>Where in PVsyst</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
     <div class="btnrow">
-      <button class="btn" id="copyBtn">نسخ الجدول</button>
-      <button class="btn ghost" id="csvBtn">تنزيل CSV</button>
+      <button class="btn" id="copyBtn">Copy table</button>
+      <button class="btn ghost" id="csvBtn">Download CSV</button>
     </div>
   </div>
 </div>
 </div>
 
 <footer>
-  <p><b>ملاحظة منهجية:</b> يجري PVsyst محاكاة ساعية كاملة، بينما تستخدم هذه الحاسبة متوسطات سنوية مرجَّحة — لذلك مخطط الخسائر هنا تقديري (عادة ضمن ±1–2% من نتيجة المحاكاة)، أما قيم البنود نفسها (Uc، Soiling، Mismatch…) فهي بالضبط ما يُدخل في البرنامج. المعادلات: النموذج الحراري U-value، ‏IAM بنموذج ASHRAE، والفقد الأومي بحساب مقاومة الموصلات عند 20°C.</p>
+  <p><b>Methodology note:</b> PVsyst runs a full hourly simulation, while this calculator uses production-weighted annual averages — so the loss diagram here is an estimate (usually within ±1–2% of the simulation). The individual parameter values (Uc, soiling, mismatch, ohmic at STC, …) are exactly what you enter in the program. Models: PVsyst U-value thermal model, ASHRAE IAM, conductor resistances at 20 °C.</p>
 </footer>
 
 <script>
@@ -393,7 +387,7 @@ function thermalLoss(){
   const U = uc + uv*v;
   const g = num("gavg"), eta = num("eta")/100, alpha = 0.9;
   const tcell = num("tamb") + (U > 0 ? g*alpha*(1-eta)/U : 0);
-  const loss = num("gamma") * (tcell - 25);   // % ; سالبة إن كانت الخلية أبرد من 25
+  const loss = num("gamma") * (tcell - 25);   // % ; negative if cell below 25 °C
   return {tcell, loss};
 }
 
@@ -412,7 +406,7 @@ function dcOhmic(){
 function acOhmic(){
   if(acMode === "direct") return num("acpct");
   const rho = parseFloat($("acmat").value);
-  const R = rho * num("aclen") / Math.max(num("acsec"), 1e-9);   // لكل طور، اتجاه واحد (نظام 3 أطوار)
+  const R = rho * num("aclen") / Math.max(num("acsec"), 1e-9);   // per phase, one way (3-phase system)
   const vll = num("vll"), cos = Math.max(num("cosphi"), 0.01);
   const pac = num("pac")*1000;
   const I = pac / (Math.sqrt(3)*vll*cos);
@@ -435,63 +429,61 @@ function recalc(){
   $("oACstc").textContent = f2(acPct);
   $("oDCAC").textContent  = num("pac") > 0 ? (pnom/num("pac")).toFixed(2) : "—";
 
-  // ===== سلسلة الخسائر (مضاعفات) — نسبة مئوية جارية: 100 = GlobHor =====
+  // ===== loss cascade — running percentage: 100 = GlobHor =====
   let p = 100;
   const steps = [];
-  const addIrr = (ar,en,pct) => { p *= (1 - pct/100); steps.push({ar,en,delta:-pct,p,dom:"irr"}); };
+  const addIrr = (name,pct) => { p *= (1 - pct/100); steps.push({name,delta:-pct,p}); };
 
   p *= (1 + num("transp")/100);
-  steps.push({ar:"كسب الإمالة", en:"Transposition", delta:+num("transp"), p, dom:"irr"});
-  addIrr("حجب الأفق","Far shading", num("far"));
-  addIrr("التظليل القريب","Near shadings", num("near"));
-  addIrr("زاوية السقوط","IAM", num("iam"));
-  addIrr("الاتساخ","Soiling", num("soil"));
+  steps.push({name:"Transposition", delta:+num("transp"), p});
+  addIrr("Far shading — horizon", num("far"));
+  addIrr("Near shadings", num("near"));
+  addIrr("IAM", num("iam"));
+  addIrr("Soiling", num("soil"));
   const globEff = ghi * p/100;
 
   const eNom = globEff * pnom;   // kWh (GlobEff × Pnom / 1 kW/m²)
   const eSteps = [];
   let e = eNom;
-  const addE = (ar,en,pct) => { e *= (1 - pct/100); eSteps.push({ar,en,delta:-pct,e}); };
+  const addE = (name,pct) => { e *= (1 - pct/100); eSteps.push({name,delta:-pct,e}); };
 
-  addE("مستوى الإشعاع المنخفض","Irradiance level", num("lowirr"));
-  addE("الحرارة","Temperature", tl.loss);
-  addE("جودة الوحدات","Module quality", num("quality"));
-  addE("التدهور الأولي","LID", num("lid"));
-  addE("عدم التطابق","Mismatch", num("mismatch"));
-  addE("تطابق جهد السلاسل","Strings mismatch", num("smismatch"));
-  addE("الفقد الأومي DC","DC ohmic (annual)", th.annual);
-  const eArray = e;
+  addE("Irradiance level", num("lowirr"));
+  addE("Temperature", tl.loss);
+  addE("Module quality", num("quality"));
+  addE("LID", num("lid"));
+  addE("Module mismatch", num("mismatch"));
+  addE("Strings mismatch", num("smismatch"));
+  addE("DC ohmic (annual)", th.annual);
 
-  addE("كفاءة العاكس","Inverter efficiency", 100 - num("etainv"));
-  addE("قطع تجاوز القدرة","Clipping", num("clip"));
-  addE("عتبة/استهلاك ليلي","Threshold", num("thresh"));
-  const eInv = e;
+  addE("Inverter efficiency", 100 - num("etainv"));
+  addE("Overpower clipping", num("clip"));
+  addE("Threshold / night", num("thresh"));
 
-  addE("كابلات AC","AC ohmic", acPct);
+  addE("AC wiring", acPct);
   let txPct = 0;
   if($("hastx").value === "1" && e > 0){
-    const iron = num("txiron")*8760 / e * 100;               // نسبة من الطاقة قبل المحوّل
+    const iron = num("txiron")*8760 / e * 100;               // share of energy before the transformer
     const cu   = num("pac") > 0 ? num("txcu")/num("pac")*0.55*100 : 0;
     txPct = iron + cu;
-    addE("المحوّل (حديد+نحاس)","Transformer", txPct);
+    addE("Transformer (iron+copper)", txPct);
   }
-  addE("الأحمال المساعدة","Auxiliaries", num("aux"));
-  addE("عدم الجاهزية","Unavailability", num("unavail"));
-  addE("تقييد الشبكة","Curtailment", num("curtail"));
+  addE("Auxiliaries", num("aux"));
+  addE("Unavailability", num("unavail"));
+  addE("Grid curtailment", num("curtail"));
   const agingLoss = num("aging") * Math.max(num("year")-1, 0);
-  if(agingLoss > 0) addE("التقادم حتى السنة "+num("year"),"Ageing", agingLoss);
+  if(agingLoss > 0) addE("Ageing to year "+num("year"), agingLoss);
   const eGrid = e;
 
   $("oTX").textContent = $("hastx").value === "1" ? f2(txPct) : "0.00";
 
-  // ===== المؤشرات =====
+  // ===== indicators =====
   const pr = (pnom > 0 && globInc > 0) ? 100*eGrid/(pnom*globInc) : 0;
   $("tEgrid").textContent = f0(eGrid);
   $("tYield").textContent = pnom > 0 ? f0(eGrid/pnom) : "—";
   $("tPR").textContent = f1(pr);
   $("tLoss").textContent = eNom > 0 ? f1(100*(1-eGrid/eNom)) : "—";
 
-  // شارات البطاقات
+  // card badges
   const opt = num("far")+num("near")+num("iam")+num("soil");
   $("bOpt").textContent   = "−"+f1(opt)+"%";
   $("bTherm").textContent = (tl.loss>=0?"−":"+")+f1(Math.abs(tl.loss))+"%";
@@ -502,7 +494,7 @@ function recalc(){
   $("bAC").textContent  = "−"+f1(acPct+txPct)+"%";
   $("bSys").textContent = "−"+f1(num("aux")+num("unavail")+num("curtail")+agingLoss)+"%";
 
-  // ===== رسم المخطط الشلالي =====
+  // ===== waterfall render =====
   const wf = $("wf");
   wf.innerHTML = "";
   const maxP = Math.max(100*(1+num("transp")/100), 100);
@@ -511,71 +503,71 @@ function recalc(){
     d.innerHTML = `<span class="nm">${nm}</span><span class="qty">${qty}</span>`;
     wf.appendChild(d);
   };
-  const bar = (ar,en,delta,widthPct,head) => {
+  const bar = (name,delta,widthPct,head) => {
     const r = document.createElement("div"); r.className = "wf-row";
     const cls = delta < 0 ? "neg" : delta > 0 ? "pos" : "zero";
     const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
     r.innerHTML =
-      `<div class="wf-lbl">${ar}<span class="en">${en}</span></div>`+
+      `<div class="wf-lbl">${name}</div>`+
       `<div class="wf-barcell"><div class="wf-bar${head?" head":""}" style="width:${Math.max(widthPct,0.5)}%"></div></div>`+
       `<div class="wf-delta ${cls}">${sign}${f2(Math.abs(delta))}%</div>`;
-    r.title = `${en}: ${sign}${f2(Math.abs(delta))}%`;
+    r.title = `${name}: ${sign}${f2(Math.abs(delta))}%`;
     wf.appendChild(r);
   };
 
-  stage("الإشعاع الأفقي GlobHor", `${f0(ghi)} kWh/m²`);
-  bar("الإشعاع الأفقي","GlobHor", 0, 100/maxP*100, true);
-  steps.forEach(s => bar(s.ar, s.en, s.delta, s.p/maxP*100, false));
-  stage("الإشعاع الفعّال GlobEff → طاقة اسمية عند STC", `${f0(globEff)} kWh/m² → ${f0(eNom)} kWh`);
-  const eScale = eNom > 0 ? (globEff*100/ghi)/maxP*100/eNom : 0;   // استمرارية عرض الشريط عبر التحويل
-  eSteps.forEach((s,i) => {
-    bar(s.ar, s.en, s.delta, s.e*eScale, false);
-    if(s.en === "DC ohmic (annual)") stage("طاقة المصفوفة الافتراضية E Array", `${f0(s.e)} kWh`);
-    if(s.en === "Threshold") stage("خرج العاكس E Inv", `${f0(s.e)} kWh`);
+  stage("Horizontal irradiation — GlobHor", `${f0(ghi)} kWh/m²`);
+  bar("GlobHor", 0, 100/maxP*100, true);
+  steps.forEach(s => bar(s.name, s.delta, s.p/maxP*100, false));
+  stage("Effective irradiance GlobEff → nominal energy at STC", `${f0(globEff)} kWh/m² → ${f0(eNom)} kWh`);
+  const eScale = eNom > 0 ? (globEff*100/ghi)/maxP*100/eNom : 0;   // keeps bar width continuous across the conversion
+  eSteps.forEach(s => {
+    bar(s.name, s.delta, s.e*eScale, false);
+    if(s.name === "DC ohmic (annual)") stage("Virtual array energy — E Array", `${f0(s.e)} kWh`);
+    if(s.name === "Threshold / night") stage("Inverter output — E Inv", `${f0(s.e)} kWh`);
   });
-  stage("الطاقة المسلَّمة للشبكة E_Grid", `${f0(eGrid)} kWh — PR ${f1(pr)}%`);
+  stage("Energy injected into grid — E_Grid", `${f0(eGrid)} kWh — PR ${f1(pr)}%`);
 
-  // ===== جدول قيم PVsyst =====
+  // ===== PVsyst values table =====
   const vals = [
-    ["حجب الأفق","Far shading / Horizon", f2(num("far"))+" %","Near Shadings → Horizon"],
-    ["التظليل القريب","Near shadings", f2(num("near"))+" %","Near Shadings scene"],
-    ["معامل IAM","IAM b₀ (ASHRAE)","0.05","Module → IAM"],
-    ["الاتساخ","Soiling loss", f2(num("soil"))+" %","Detailed losses → Soiling"],
-    ["معامل حراري ثابت","Uc", f1(num("uc"))+" W/m²K","Detailed losses → Thermal"],
-    ["معامل الرياح","Uv", f1(num("uv"))+" W/m²K/m/s","Detailed losses → Thermal"],
-    ["الفقد الأومي DC عند STC","DC ohmic at STC", f2(th.stc)+" %","Detailed losses → Ohmic"],
-    ["جودة الوحدات","Module quality", f2(num("quality"))+" %","Detailed losses → Module quality"],
-    ["التدهور الأولي","LID", f2(num("lid"))+" %","Detailed losses → LID"],
-    ["عدم التطابق","Mismatch", f2(num("mismatch"))+" %","Detailed losses → Mismatch"],
-    ["تطابق السلاسل","Strings voltage mismatch", f2(num("smismatch"))+" %","Detailed losses → Mismatch"],
-    ["فقد كابلات AC","AC ohmic", f2(acPct)+" %","Detailed losses → Ohmic → AC"],
-    ["الأحمال المساعدة","Auxiliaries", f2(num("aux"))+" %","Detailed losses → Auxiliaries"],
-    ["عدم الجاهزية","Unavailability", f2(num("unavail"))+" % وقت","Detailed losses → Unavailability"],
-    ["معدل التقادم","Ageing rate", f2(num("aging"))+" %/yr","Detailed losses → Ageing"],
+    ["Far shading / horizon", f2(num("far"))+" %","Near Shadings → Horizon"],
+    ["Near shadings", f2(num("near"))+" %","Near Shadings scene"],
+    ["IAM b₀ (ASHRAE)","0.05","Module → IAM"],
+    ["Soiling loss", f2(num("soil"))+" %","Detailed losses → Soiling"],
+    ["Thermal constant — Uc", f1(num("uc"))+" W/m²K","Detailed losses → Thermal"],
+    ["Thermal wind — Uv", f1(num("uv"))+" W/m²K/m/s","Detailed losses → Thermal"],
+    ["DC ohmic loss at STC", f2(th.stc)+" %","Detailed losses → Ohmic"],
+    ["Module quality loss", f2(num("quality"))+" %","Detailed losses → Module quality"],
+    ["LID", f2(num("lid"))+" %","Detailed losses → LID"],
+    ["Module mismatch", f2(num("mismatch"))+" %","Detailed losses → Mismatch"],
+    ["Strings voltage mismatch", f2(num("smismatch"))+" %","Detailed losses → Mismatch"],
+    ["AC ohmic loss", f2(acPct)+" %","Detailed losses → Ohmic → AC"],
+    ["Auxiliaries", f2(num("aux"))+" %","Detailed losses → Auxiliaries"],
+    ["Unavailability", f2(num("unavail"))+" % time","Detailed losses → Unavailability"],
+    ["Ageing rate", f2(num("aging"))+" %/yr","Detailed losses → Ageing"],
   ];
   if($("hastx").value === "1"){
     vals.splice(12, 0,
-      ["فقد حديد المحوّل","Transformer iron loss", f2(num("txiron"))+" kW","Ohmic → MV transfo"],
-      ["فقد نحاس المحوّل","Transformer copper loss", f2(num("txcu"))+" kW","Ohmic → MV transfo"]);
+      ["Transformer iron loss", f2(num("txiron"))+" kW","Ohmic → MV transfo"],
+      ["Transformer copper loss", f2(num("txcu"))+" kW","Ohmic → MV transfo"]);
   }
   const tb = $("valtable").tBodies[0];
   tb.innerHTML = vals.map(v =>
-    `<tr><td>${v[0]}<span class="en">${v[1]}</span></td><td class="num">${v[2]}</td><td><span class="en">${v[3]}</span></td></tr>`
+    `<tr><td>${v[0]}</td><td class="num">${v[1]}</td><td><span class="loc">${v[2]}</span></td></tr>`
   ).join("");
   window.__vals = vals;
 }
 
 $("copyBtn").onclick = async () => {
-  const txt = (window.__vals||[]).map(v => `${v[1]}\t${v[2]}\t${v[3]}`).join("\n");
-  try{ await navigator.clipboard.writeText(txt); $("copyBtn").textContent = "تم النسخ ✓";
-    setTimeout(()=>$("copyBtn").textContent="نسخ الجدول", 1600);
-  }catch(e){ alert("تعذّر النسخ — انسخ يدوياً من الجدول."); }
+  const txt = (window.__vals||[]).map(v => `${v[0]}\t${v[1]}\t${v[2]}`).join("\n");
+  try{ await navigator.clipboard.writeText(txt); $("copyBtn").textContent = "Copied ✓";
+    setTimeout(()=>$("copyBtn").textContent="Copy table", 1600);
+  }catch(e){ alert("Copy failed — copy manually from the table."); }
 };
 $("csvBtn").onclick = () => {
   const head = "Parameter,Value,PVsyst location\n";
-  const csv = head + (window.__vals||[]).map(v => `"${v[1]}","${v[2]}","${v[3]}"`).join("\n");
+  const csv = head + (window.__vals||[]).map(v => `"${v[0]}","${v[1]}","${v[2]}"`).join("\n");
   const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob(["﻿"+csv], {type:"text/csv;charset=utf-8"}));
+  a.href = URL.createObjectURL(new Blob([csv], {type:"text/csv;charset=utf-8"}));
   a.download = "pvsyst_losses.csv"; a.click(); URL.revokeObjectURL(a.href);
 };
 
