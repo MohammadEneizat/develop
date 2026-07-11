@@ -180,7 +180,28 @@
         <div class="fld"><label>IAM loss (%)</label><input id="iam" type="number" step="any" value="2.5"></div>
         <div class="fld"><label>Soiling (%)</label><input id="soil" type="number" step="any" value="3"></div>
       </div>
-      <p class="hint">IAM uses the ASHRAE model F = 1 − b₀·(1/cosθ − 1) with b₀ = 0.05 by default; the typical annual loss for a fixed tilted plane is 2–3%. Soiling: 2–3% temperate climate, 4–6% dusty desert sites without regular cleaning.</p>
+      <div class="modeswitch" role="group" aria-label="Soiling input method" style="margin-top:12px">
+        <button id="soilModeDirect" aria-pressed="true">Soiling: direct %</button>
+        <button id="soilModeCalc" aria-pressed="false">Soiling estimator</button>
+      </div>
+      <div id="soilCalc" class="grid3" hidden>
+        <div class="fld"><label>Site environment</label>
+          <select id="soilenv">
+            <option value="0.02">Rural, clean, frequent rain</option>
+            <option value="0.04">Suburban / light dust</option>
+            <option value="0.08" selected>Urban / agricultural</option>
+            <option value="0.15">Desert</option>
+            <option value="0.25">Heavy dust / industrial</option>
+            <option value="custom">Custom rate…</option>
+          </select></div>
+        <div class="fld"><label>Soiling accumulation rate (%/day)</label><input id="soilrate" type="number" step="any" value="0.08"></div>
+        <div class="fld"><label>Days between cleanings / rain events</label><input id="soildays" type="number" step="any" value="30"></div>
+      </div>
+      <div class="calcout" id="soilOut" hidden>
+        <span>Peak soiling before cleaning: <b id="oSoilPeak">—</b> %</span>
+        <span>Average soiling loss (value for PVsyst): <b id="oSoil">—</b> %</span>
+      </div>
+      <p class="hint">IAM uses the ASHRAE model F = 1 − b₀·(1/cosθ − 1) with b₀ = 0.05 by default; the typical annual loss for a fixed tilted plane is 2–3%. The soiling estimator assumes a sawtooth build-up: average loss = rate × interval / 2 — every cleaning or significant rain resets the accumulation.</p>
     </div>
   </details>
 
@@ -236,14 +257,23 @@
       <div id="dcDirect" class="grid2">
         <div class="fld"><label>Ohmic loss at STC (%)</label><input id="dcpct" type="number" step="any" value="1.5"></div>
       </div>
-      <div id="dcCalc" class="grid3" hidden>
-        <div class="fld"><label>Conductor material</label>
-          <select id="dcmat"><option value="0.0172">Copper (Cu)</option><option value="0.0282">Aluminium (Al)</option></select></div>
-        <div class="fld"><label>One-way cable length — L (m)</label><input id="dclen" type="number" step="any" value="40"></div>
-        <div class="fld"><label>Cross-section — S (mm²)</label><input id="dcsec" type="number" step="any" value="6"></div>
-        <div class="fld"><label>Modules per string</label><input id="nmods" type="number" step="1" value="26"></div>
-        <div class="fld"><label>Module Vmp (V)</label><input id="vmp" type="number" step="any" value="34.5"></div>
-        <div class="fld"><label>Module Imp (A)</label><input id="imp" type="number" step="any" value="13.2"></div>
+      <div id="dcCalc" hidden>
+        <div class="grid3">
+          <div class="fld"><label>Modules per string</label><input id="nmods" type="number" step="1" value="26"></div>
+          <div class="fld"><label>Module Vmp (V)</label><input id="vmp" type="number" step="any" value="34.5"></div>
+          <div class="fld"><label>Module Imp (A)</label><input id="imp" type="number" step="any" value="13.2"></div>
+          <div class="fld"><label>Number of parallel strings</label><input id="nstrings" type="number" step="1" value="8"></div>
+        </div>
+        <div class="grid3" style="margin-top:10px">
+          <div class="fld"><label>String cable material</label>
+            <select id="dcmat"><option value="0.0172">Copper (Cu)</option><option value="0.0282">Aluminium (Al)</option></select></div>
+          <div class="fld"><label>String cable one-way length — L (m)</label><input id="dclen" type="number" step="any" value="40"></div>
+          <div class="fld"><label>String cable section — S (mm²)</label><input id="dcsec" type="number" step="any" value="6"></div>
+          <div class="fld"><label>Main DC cable material</label>
+            <select id="dcmat2"><option value="0.0172">Copper (Cu)</option><option value="0.0282" selected>Aluminium (Al)</option></select></div>
+          <div class="fld"><label>Main DC cable one-way length (m) — 0 = none</label><input id="dclen2" type="number" step="any" value="80"></div>
+          <div class="fld"><label>Main DC cable section (mm²)</label><input id="dcsec2" type="number" step="any" value="35"></div>
+        </div>
       </div>
       <div class="grid2" style="margin-top:10px">
         <div class="fld"><label>Annual duty factor (quadratic scaling)</label><input id="dcduty" type="number" step="any" value="0.53"></div>
@@ -251,9 +281,9 @@
       <div class="calcout">
         <span>Loss at STC (value for PVsyst): <b id="oDCstc">—</b> %</span>
         <span>Estimated effective annual loss: <b id="oDCyr">—</b> %</span>
-        <span id="oDCr" hidden>String resistance: <b id="oDCrv">—</b> Ω</span>
+        <span id="oDCr" hidden>Strings <b id="oDCstr">—</b> % + main cable <b id="oDCmain">—</b> %</span>
       </div>
-      <p class="hint">Resistance R = ρ·2L/S (out and back); loss at STC = I·R/V string. Enter the STC value in PVsyst — the program applies its own quadratic scaling with current over the year; the duty factor (≈0.5–0.6) is used here only to estimate the diagram.</p>
+      <p class="hint">Each segment: R = ρ·2L/S (out and back). String segment carries Imp; the main cable (combiner box → inverter) carries n strings × Imp. Loss at STC = I·R/V string per segment, summed. Enter the STC value in PVsyst — the program applies its own quadratic scaling with current over the year; the duty factor (≈0.5–0.6) is used here only to estimate the diagram.</p>
     </div>
   </details>
 
@@ -290,14 +320,24 @@
       <div class="grid3" style="margin-top:12px">
         <div class="fld"><label>MV step-up transformer</label>
           <select id="hastx"><option value="0" selected>None</option><option value="1">Present</option></select></div>
-        <div class="fld"><label>Iron loss (permanent) — P₀ (kW)</label><input id="txiron" type="number" step="any" value="1.1" disabled></div>
-        <div class="fld"><label>Copper loss at nominal — Pcc (kW)</label><input id="txcu" type="number" step="any" value="9.5" disabled></div>
+        <div class="fld"><label>Iron loss (permanent) — P₀ (kW)</label><input id="txiron" type="number" step="any" value="0.2" disabled></div>
+        <div class="fld"><label>Copper loss at nominal — Pcc (kW)</label><input id="txcu" type="number" step="any" value="1.2" disabled></div>
+      </div>
+      <div class="grid3" style="margin-top:12px">
+        <div class="fld"><label>MV line to grid connection</label>
+          <select id="hasmv"><option value="0" selected>None</option><option value="1">Present</option></select></div>
+        <div class="fld"><label>MV voltage — V L-L (kV)</label><input id="mvkv" type="number" step="any" value="33" disabled></div>
+        <div class="fld"><label>MV line length (m)</label><input id="mvlen" type="number" step="any" value="500" disabled></div>
+        <div class="fld"><label>MV section per phase (mm²)</label><input id="mvsec" type="number" step="any" value="95" disabled></div>
+        <div class="fld"><label>MV conductor material</label>
+          <select id="mvmat" disabled><option value="0.0282" selected>Aluminium (Al)</option><option value="0.0172">Copper (Cu)</option></select></div>
       </div>
       <div class="calcout">
         <span>AC loss at nominal power: <b id="oACstc">—</b> %</span>
         <span>Annual transformer loss: <b id="oTX">—</b> %</span>
+        <span>MV line loss: <b id="oMV">—</b> %</span>
       </div>
-      <p class="hint">Iron loss runs 8760 h/yr — even at night while the transformer stays connected — so its annual share is P₀×8760/E AC. Copper loss scales quadratically with load (annual factor ≈ 0.55 of its nominal value).</p>
+      <p class="hint">Iron loss runs 8760 h/yr — even at night while the transformer stays connected — so its annual share is P₀×8760/E AC. Copper loss scales quadratically with load (annual factor ≈ 0.55 of its nominal value). Typical transformer losses scale with size: ≈0.2/1.2 kW for 100 kVA, ≈1.0/9 kW for 1000 kVA (iron/copper). The MV line uses the same 3-phase formula as the LV side, at the MV voltage after the transformer — at MV the current is small, so this loss is often only noticeable on long lines or large plants.</p>
     </div>
   </details>
 
@@ -350,8 +390,32 @@ const num = id => { const v = parseFloat($(id).value); return isFinite(v) ? v : 
 const f1 = x => x.toLocaleString("en-US",{minimumFractionDigits:1, maximumFractionDigits:1});
 const f2 = x => x.toLocaleString("en-US",{minimumFractionDigits:2, maximumFractionDigits:2});
 const f0 = x => Math.round(x).toLocaleString("en-US");
+const f3 = x => x.toLocaleString("en-US",{minimumFractionDigits:3, maximumFractionDigits:3});
 
-let dcMode = "direct", acMode = "direct";
+let dcMode = "direct", acMode = "direct", soilMode = "direct";
+
+function setSoilMode(mode){
+  soilMode = mode;
+  $("soilCalc").hidden = mode !== "calc";
+  $("soilOut").hidden = mode !== "calc";
+  $("soil").disabled = mode === "calc";
+  $("soilModeDirect").setAttribute("aria-pressed", mode === "direct");
+  $("soilModeCalc").setAttribute("aria-pressed", mode === "calc");
+  recalc();
+}
+$("soilModeDirect").onclick = () => setSoilMode("direct");
+$("soilModeCalc").onclick   = () => setSoilMode("calc");
+$("soilenv").addEventListener("change", e => {
+  if(e.target.value !== "custom") $("soilrate").value = e.target.value;
+  recalc();
+});
+$("soilrate").addEventListener("input", () => { $("soilenv").value = "custom"; });
+
+function soilingPct(){
+  if(soilMode === "direct") return {avg: num("soil"), peak: null};
+  const peak = Math.min(num("soilrate") * num("soildays"), 50);
+  return {avg: peak / 2, peak};
+}
 
 function setMode(group, mode){
   if(group==="dc"){ dcMode = mode;
@@ -381,6 +445,11 @@ $("hastx").addEventListener("change", e => {
   $("txiron").disabled = !on; $("txcu").disabled = !on;
   recalc();
 });
+$("hasmv").addEventListener("change", e => {
+  const on = e.target.value === "1";
+  ["mvkv","mvlen","mvsec","mvmat"].forEach(id => $(id).disabled = !on);
+  recalc();
+});
 
 function thermalLoss(){
   const uc = num("uc"), uv = num("uv"), v = num("wind");
@@ -394,13 +463,33 @@ function thermalLoss(){
 function dcOhmic(){
   if(dcMode === "direct"){
     const stc = num("dcpct");
-    return {stc, annual: stc*num("dcduty"), R: null};
+    return {stc, annual: stc*num("dcduty"), str: null, main: null};
   }
-  const rho = parseFloat($("dcmat").value);
-  const R = rho * 2*num("dclen") / Math.max(num("dcsec"), 1e-9);
   const vstr = num("vmp") * num("nmods");
-  const stc = vstr > 0 ? 100 * num("imp")*R/vstr : 0;
-  return {stc, annual: stc*num("dcduty"), R};
+  if(vstr <= 0) return {stc: 0, annual: 0, str: 0, main: 0};
+  // string segment — carries Imp of one string
+  const R1 = parseFloat($("dcmat").value) * 2*num("dclen") / Math.max(num("dcsec"), 1e-9);
+  const str = 100 * num("imp")*R1/vstr;
+  // main DC cable (combiner → inverter) — carries n strings × Imp
+  let main = 0;
+  if(num("dclen2") > 0){
+    const R2 = parseFloat($("dcmat2").value) * 2*num("dclen2") / Math.max(num("dcsec2"), 1e-9);
+    main = 100 * Math.max(num("nstrings"),1)*num("imp")*R2/vstr;
+  }
+  const stc = str + main;
+  return {stc, annual: stc*num("dcduty"), str, main};
+}
+
+function mvOhmic(){
+  // 3-phase MV line loss % at nominal power (same formula as LV, at MV voltage)
+  if($("hasmv").value !== "1") return 0;
+  const rho = parseFloat($("mvmat").value);
+  const R = rho * num("mvlen") / Math.max(num("mvsec"), 1e-9);
+  const vll = num("mvkv")*1000, cos = Math.max(num("cosphi"), 0.01);
+  const pac = num("pac")*1000;
+  if(pac <= 0 || vll <= 0) return 0;
+  const I = pac / (Math.sqrt(3)*vll*cos);
+  return 100 * 3*I*I*R / pac;
 }
 
 function acOhmic(){
@@ -419,15 +508,20 @@ function recalc(){
 
   const th = dcOhmic(), tl = thermalLoss();
   const acPct = acOhmic();
+  const soilv = soilingPct();
+  const mvPct = mvOhmic();
 
   $("oTcell").textContent = f1(tl.tcell);
   $("oTherm").textContent = f2(tl.loss);
   $("oDCstc").textContent = f2(th.stc);
   $("oDCyr").textContent  = f2(th.annual);
-  $("oDCr").hidden = th.R === null;
-  if(th.R !== null) $("oDCrv").textContent = th.R.toFixed(3);
+  $("oDCr").hidden = th.str === null;
+  if(th.str !== null){ $("oDCstr").textContent = f2(th.str); $("oDCmain").textContent = f2(th.main); }
   $("oACstc").textContent = f2(acPct);
+  $("oMV").textContent    = f3(mvPct);
   $("oDCAC").textContent  = num("pac") > 0 ? (pnom/num("pac")).toFixed(2) : "—";
+  $("oSoil").textContent  = f2(soilv.avg);
+  if(soilv.peak !== null) $("oSoilPeak").textContent = f2(soilv.peak);
 
   // ===== loss cascade — running percentage: 100 = GlobHor =====
   let p = 100;
@@ -439,7 +533,7 @@ function recalc(){
   addIrr("Far shading — horizon", num("far"));
   addIrr("Near shadings", num("near"));
   addIrr("IAM", num("iam"));
-  addIrr("Soiling", num("soil"));
+  addIrr("Soiling", soilv.avg);
   const globEff = ghi * p/100;
 
   const eNom = globEff * pnom;   // kWh (GlobEff × Pnom / 1 kW/m²)
@@ -467,6 +561,7 @@ function recalc(){
     txPct = iron + cu;
     addE("Transformer (iron+copper)", txPct);
   }
+  if(mvPct > 0) addE("MV line", mvPct);
   addE("Auxiliaries", num("aux"));
   addE("Unavailability", num("unavail"));
   addE("Grid curtailment", num("curtail"));
@@ -484,14 +579,14 @@ function recalc(){
   $("tLoss").textContent = eNom > 0 ? f1(100*(1-eGrid/eNom)) : "—";
 
   // card badges
-  const opt = num("far")+num("near")+num("iam")+num("soil");
+  const opt = num("far")+num("near")+num("iam")+soilv.avg;
   $("bOpt").textContent   = "−"+f1(opt)+"%";
   $("bTherm").textContent = (tl.loss>=0?"−":"+")+f1(Math.abs(tl.loss))+"%";
   const arr = num("lowirr")+num("quality")+num("lid")+num("mismatch")+num("smismatch");
   $("bArr").textContent = "−"+f1(arr)+"%";
   $("bDC").textContent  = "−"+f2(th.annual)+"%";
   $("bInv").textContent = "−"+f1(100-num("etainv")+num("clip")+num("thresh"))+"%";
-  $("bAC").textContent  = "−"+f1(acPct+txPct)+"%";
+  $("bAC").textContent  = "−"+f1(acPct+txPct+mvPct)+"%";
   $("bSys").textContent = "−"+f1(num("aux")+num("unavail")+num("curtail")+agingLoss)+"%";
 
   // ===== waterfall render =====
@@ -532,7 +627,7 @@ function recalc(){
     ["Far shading / horizon", f2(num("far"))+" %","Near Shadings → Horizon"],
     ["Near shadings", f2(num("near"))+" %","Near Shadings scene"],
     ["IAM b₀ (ASHRAE)","0.05","Module → IAM"],
-    ["Soiling loss", f2(num("soil"))+" %","Detailed losses → Soiling"],
+    ["Soiling loss", f2(soilv.avg)+" %","Detailed losses → Soiling"],
     ["Thermal constant — Uc", f1(num("uc"))+" W/m²K","Detailed losses → Thermal"],
     ["Thermal wind — Uv", f1(num("uv"))+" W/m²K/m/s","Detailed losses → Thermal"],
     ["DC ohmic loss at STC", f2(th.stc)+" %","Detailed losses → Ohmic"],
@@ -545,6 +640,9 @@ function recalc(){
     ["Unavailability", f2(num("unavail"))+" % time","Detailed losses → Unavailability"],
     ["Ageing rate", f2(num("aging"))+" %/yr","Detailed losses → Ageing"],
   ];
+  if(mvPct > 0){
+    vals.splice(12, 0, ["MV line loss", f3(mvPct)+" %","Ohmic → MV line"]);
+  }
   if($("hastx").value === "1"){
     vals.splice(12, 0,
       ["Transformer iron loss", f2(num("txiron"))+" kW","Ohmic → MV transfo"],

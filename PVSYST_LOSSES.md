@@ -11,12 +11,12 @@ A tool that computes every loss item requested by PVsyst's **Detailed Losses** d
 
 ## Loss items covered
 
-- **Irradiance losses**: far shading (horizon), near shadings, incidence angle (IAM, ASHRAE model), soiling.
+- **Irradiance losses**: far shading (horizon), near shadings, incidence angle (IAM, ASHRAE model), soiling — direct % or a **soiling estimator** (site-environment presets, sawtooth build-up: average loss = accumulation rate × cleaning interval / 2).
 - **Thermal loss**: PVsyst's U-value model — `Tcell = Tamb + G·α·(1−η)/(Uc + Uv·v)` with mounting presets (free-standing 29, semi-integrated 20, insulated 15 W/m²K).
 - **Array losses**: low-light irradiance level, module quality (quarter-of-tolerance rule), LID, module mismatch, strings voltage mismatch, ageing.
-- **DC ohmic loss**: direct % at STC or a full cable calculator (`R = ρ·2L/S`, copper/aluminium) with the effective annual loss.
+- **DC ohmic loss**: direct % at STC or a **two-segment cable calculator** — string cables (carrying Imp) plus the main DC cable from combiner box to inverter (carrying n strings × Imp), `R = ρ·2L/S`, copper/aluminium — with the effective annual loss.
 - **Inverter**: European efficiency, overpower clipping with a DC/AC ratio indicator, power threshold.
-- **AC side**: cable loss (direct % or 3-phase calculator), MV step-up transformer (iron loss over 8760 h + quadratic copper loss).
+- **AC side & MV**: LV cable loss (direct % or 3-phase calculator), MV step-up transformer (iron loss over 8760 h + quadratic copper loss), and an **MV line calculator** (3-phase loss at the medium-voltage level to the grid connection point).
 - **Plant level**: auxiliaries, unavailability, grid curtailment.
 
 ## Outputs

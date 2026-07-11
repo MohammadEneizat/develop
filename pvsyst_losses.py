@@ -29,16 +29,38 @@ def thermal_loss_pct(t_amb, g_inc, gamma_pmpp=0.34, **kw):
     return gamma_pmpp * (cell_temperature(t_amb, g_inc, **kw) - 25.0)
 
 
-def dc_ohmic_stc_pct(length_m, section_mm2, n_modules, vmp, imp,
-                     material="cu"):
-    """DC wiring loss fraction at STC (%): R = rho*2L/S, loss = I*R/Vstring.
+def soiling_loss_pct(rate_pct_per_day, days_between_cleaning):
+    """Average soiling loss from a sawtooth build-up model.
 
-    This is the value PVsyst asks for; PVsyst applies its own quadratic
-    scaling with current over the year.
+    Soiling accumulates linearly at `rate_pct_per_day` and is reset by
+    each cleaning or significant rain every `days_between_cleaning`.
+    Returns (average_pct, peak_pct); the average is the PVsyst value.
+    Typical rates (%/day): rural 0.02, suburban 0.04, urban/agricultural
+    0.08, desert 0.15, heavy dust/industrial 0.25.
     """
-    r = RHO[material] * 2.0 * length_m / section_mm2
+    peak = min(rate_pct_per_day * days_between_cleaning, 50.0)
+    return peak / 2.0, peak
+
+
+def dc_ohmic_stc_pct(length_m, section_mm2, n_modules, vmp, imp,
+                     material="cu", main_length_m=0.0, main_section_mm2=35.0,
+                     n_strings=1, main_material="al"):
+    """DC wiring loss fraction at STC (%), string cable + optional main cable.
+
+    String segment: R = rho*2L/S carrying Imp; main DC cable (combiner box
+    to inverter) carries n_strings*Imp. Loss per segment = I*R/Vstring,
+    summed. This is the value PVsyst asks for; PVsyst applies its own
+    quadratic scaling with current over the year.
+    """
     v_string = vmp * n_modules
-    return 100.0 * imp * r / v_string if v_string > 0 else 0.0
+    if v_string <= 0:
+        return 0.0
+    r_str = RHO[material] * 2.0 * length_m / section_mm2
+    loss = 100.0 * imp * r_str / v_string
+    if main_length_m > 0:
+        r_main = RHO[main_material] * 2.0 * main_length_m / main_section_mm2
+        loss += 100.0 * max(n_strings, 1) * imp * r_main / v_string
+    return loss
 
 
 def ac_ohmic_pct(p_ac_kw, length_m, section_mm2, v_ll=400.0,
@@ -49,6 +71,18 @@ def ac_ohmic_pct(p_ac_kw, length_m, section_mm2, v_ll=400.0,
     r = RHO[material] * length_m / section_mm2          # per phase, one way
     i = p_ac_kw * 1000.0 / (3 ** 0.5 * v_ll * cos_phi)
     return 100.0 * 3.0 * i * i * r / (p_ac_kw * 1000.0)
+
+
+def mv_line_loss_pct(p_ac_kw, length_m, section_mm2, v_kv=33.0,
+                     cos_phi=1.0, material="al"):
+    """Three-phase MV line loss (%) after the step-up transformer.
+
+    Same formula as the LV side at the MV voltage; at MV the current is
+    small, so this is usually only noticeable on long lines/large plants.
+    """
+    return ac_ohmic_pct(p_ac_kw, length_m, section_mm2,
+                        v_ll=v_kv * 1000.0, cos_phi=cos_phi,
+                        material=material)
 
 
 def module_quality_default_pct(tol_low_pct, tol_high_pct):
@@ -104,6 +138,7 @@ class SystemLosses:
     # AC side & system
     ac_ohmic: float = 0.5
     transformer: float = 0.0          # annual %, use transformer_annual_pct()
+    mv_line: float = 0.0              # %, use mv_line_loss_pct()
     auxiliaries: float = 0.3
     unavailability: float = 2.0
     curtailment: float = 0.0
@@ -146,6 +181,7 @@ class SystemLosses:
             ("Threshold", self.threshold),
             ("AC ohmic", self.ac_ohmic),
             ("Transformer", self.transformer),
+            ("MV line", self.mv_line),
             ("Auxiliaries", self.auxiliaries),
             ("Unavailability", self.unavailability),
             ("Curtailment", self.curtailment),
