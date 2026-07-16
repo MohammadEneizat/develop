@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reactive Power Compensation Sizing</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f5f7f9;
+    --surface: #fcfdfe;
+    --surface-2: #eef1f4;
+    --ink: #101418;
+    --ink-2: #4e565e;
+    --muted: #828a92;
+    --hairline: #dde2e7;
+    --grid: #e4e8ec;
+    --accent: #1c5cab;
+    --accent-soft: #e3edf9;
+    --series-p: #2a78d6;
+    --series-q: #008300;
+    --good: #006300;
+    --good-bg: #e6f4e6;
+    --crit: #d03b3b;
+    --crit-bg: #fbeaea;
+    --warn: #8a5b00;
+    --warn-bg: #fdf3dd;
+    --shadow: 0 1px 2px rgba(16,20,24,.05), 0 4px 16px rgba(16,20,24,.05);
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --bg: #0e1013;
+      --surface: #1a1d21;
+      --surface-2: #22262b;
+      --ink: #f2f4f6;
+      --ink-2: #b8bfc6;
+      --muted: #848c94;
+      --hairline: #2c3138;
+      --grid: #262b31;
+      --accent: #3987e5;
+      --accent-soft: #16233a;
+      --series-p: #3987e5;
+      --series-q: #008300;
+      --good: #0ca30c;
+      --good-bg: #12240f;
+      --crit: #e05252;
+      --crit-bg: #331616;
+      --warn: #fab219;
+      --warn-bg: #2e2410;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0e1013;
+    --surface: #1a1d21;
+    --surface-2: #22262b;
+    --ink: #f2f4f6;
+    --ink-2: #b8bfc6;
+    --muted: #848c94;
+    --hairline: #2c3138;
+    --grid: #262b31;
+    --accent: #3987e5;
+    --accent-soft: #16233a;
+    --series-p: #3987e5;
+    --series-q: #008300;
+    --good: #0ca30c;
+    --good-bg: #12240f;
+    --crit: #e05252;
+    --crit-bg: #331616;
+    --warn: #fab219;
+    --warn-bg: #2e2410;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 4px 16px rgba(0,0,0,.3);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  ::selection { background: var(--accent-soft); }
+
+  header.app {
+    display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: center;
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface);
+    position: sticky; top: 0; z-index: 20;
+  }
+  .brand { display: flex; flex-direction: column; gap: 2px; }
+  .eyebrow {
+    font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+  }
+  .brand input {
+    font-family: var(--sans); font-size: 20px; font-weight: 700;
+    border: none; background: transparent; color: var(--ink);
+    padding: 0; min-width: 260px; border-bottom: 1px dashed transparent;
+  }
+  .brand input:hover, .brand input:focus {
+    outline: none; border-bottom-color: var(--muted);
+  }
+  header .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 12.5px; font-weight: 600;
+    padding: 7px 14px; border-radius: 999px;
+    border: 1px solid var(--hairline);
+  }
+  .pill.good { background: var(--good-bg); color: var(--good); border-color: transparent; }
+  .pill.crit { background: var(--crit-bg); color: var(--crit); border-color: transparent; }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 400px;
+    gap: 24px;
+    padding: 24px 28px 64px;
+    max-width: 1280px;
+    margin: 0 auto;
+    align-items: start;
+  }
+  @media (max-width: 980px) {
+    main { grid-template-columns: minmax(0, 1fr); }
+    .rail { position: static !important; }
+  }
+
+  .col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  .rail { position: sticky; top: 86px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 20px 22px;
+  }
+  .card h2 {
+    display: flex; align-items: baseline; gap: 10px;
+    margin: 0 0 4px;
+    font-size: 15px; font-weight: 700;
+  }
+  .stepno {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    color: var(--accent); letter-spacing: .08em;
+  }
+  .card .sub { margin: 0 0 16px; color: var(--ink-2); font-size: 12.5px; max-width: 62ch; }
+
+  .fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; }
+  .field label {
+    display: block; font-size: 11px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 5px;
+  }
+  .inwrap {
+    display: flex; align-items: center;
+    border: 1px solid var(--hairline); border-radius: 7px;
+    background: var(--surface);
+    transition: border-color .12s;
+  }
+  .inwrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .inwrap input, .inwrap select {
+    flex: 1; min-width: 0; border: none; background: transparent; color: var(--ink);
+    font-family: var(--mono); font-size: 13.5px; font-variant-numeric: tabular-nums;
+    padding: 8px 10px;
+  }
+  .inwrap input:focus, .inwrap select:focus { outline: none; }
+  .inwrap .unit {
+    font-family: var(--mono); font-size: 11px; color: var(--muted);
+    padding: 0 10px 0 4px; white-space: nowrap; user-select: none;
+  }
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+  .derived {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--hairline);
+  }
+  .chip {
+    display: flex; flex-direction: column; gap: 1px;
+    background: var(--surface-2); border-radius: 7px; padding: 8px 12px;
+    min-width: 130px;
+  }
+  .chip .k { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .chip .v { font-family: var(--mono); font-size: 14.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chip .v small { font-size: 10.5px; color: var(--muted); font-weight: 500; margin-left: 3px; }
+
+  table.rows { width: 100%; border-collapse: collapse; }
+  table.rows th {
+    text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; padding: 0 8px 7px 0;
+  }
+  table.rows td { padding: 3px 8px 3px 0; vertical-align: middle; }
+  table.rows td:last-child, table.rows th:last-child { padding-right: 0; }
+  table.rows .out {
+    font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums;
+    text-align: right; white-space: nowrap; color: var(--ink-2);
+  }
+  .rowscroll { overflow-x: auto; }
+  .rowscroll table.rows { min-width: 560px; }
+
+  button {
+    font-family: var(--sans); font-size: 13px; font-weight: 600;
+    border: 1px solid var(--hairline); border-radius: 7px;
+    background: var(--surface); color: var(--ink);
+    padding: 7px 14px; cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  button:hover { background: var(--surface-2); }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { filter: brightness(1.08); }
+  button.icon {
+    padding: 4px 9px; font-size: 14px; line-height: 1; color: var(--muted);
+    border: none; background: transparent;
+  }
+  button.icon:hover { color: var(--crit); background: var(--crit-bg); }
+  .addrow { margin-top: 10px; }
+
+  .note {
+    margin-top: 12px; padding: 10px 12px; border-radius: 7px;
+    font-size: 12.5px; background: var(--surface-2); color: var(--ink-2);
+  }
+  .note.accent { background: var(--accent-soft); color: var(--ink); }
+  .note .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* Results rail */
+  .rail .card { margin-bottom: 20px; }
+  .stat3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat {
+    display: flex; flex-direction: column; gap: 2px;
+    background: var(--surface-2); border-radius: 8px; padding: 10px 12px;
+    border-top: 3px solid transparent;
+  }
+  .stat.p { border-top-color: var(--series-p); }
+  .stat.q { border-top-color: var(--series-q); }
+  .stat.s { border-top-color: var(--muted); }
+  .stat .k { font-size: 10.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .stat .v { font-family: var(--mono); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.3; }
+  .stat .u { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+
+  figure { margin: 0; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption { font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+
+  .bars { display: flex; flex-direction: column; gap: 9px; margin-top: 4px; }
+  .bar-row .bar-head {
+    display: flex; justify-content: space-between; gap: 12px;
+    font-size: 12px; color: var(--ink-2); margin-bottom: 3px;
+  }
+  .bar-row .bar-head .val { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; white-space: nowrap; }
+  .bar-track { height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+  .bar-fill {
+    height: 100%; background: var(--series-p); border-radius: 0 5px 5px 0;
+    min-width: 2px; transition: width .25s ease;
+  }
+  .bar-row.total .bar-fill { background: var(--accent); }
+
+  .check {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 12px 14px; border-radius: 8px;
+  }
+  .check.good { background: var(--good-bg); color: var(--good); }
+  .check.crit { background: var(--crit-bg); color: var(--crit); }
+  .check .icon-mark { font-size: 17px; line-height: 1.35; }
+  .check .msg { font-size: 12.5px; }
+  .check .msg b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  .kv { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 12.5px; border-bottom: 1px dashed var(--hairline); }
+  .kv:last-child { border-bottom: none; }
+  .kv .k { color: var(--ink-2); }
+  .kv .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+  @media print {
+    header.app { position: static; }
+    main { grid-template-columns: 1fr; max-width: none; padding: 12px 0; }
+    .rail { position: static; }
+    .card { box-shadow: none; break-inside: avoid; }
+    .actions, .addrow, button { display: none !important; }
+    body { background: #fff; }
+  }
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div class="brand">
+    <span class="eyebrow">Reactive Power Compensation · Solar PV Plant Sizing</span>
+    <input id="projectName" value="Belvior" aria-label="Project name" spellcheck="false">
+  </div>
+  <div class="spacer"></div>
+  <span class="pill" id="headerPill"><span class="dot"></span><span id="headerPillText">—</span></span>
+</header>
+
+<main>
+  <div class="col">
+
+    <!-- Step 1 -->
+    <section class="card">
+      <h2><span class="stepno">STEP 1</span> Initial sizing</h2>
+      <p class="sub">Grid injection limit and the power factor required at the point of interconnection set the plant's apparent-power rating and the reactive power the grid demands.</p>
+      <div class="fields">
+        <div class="field">
+          <label for="installedDC">Installed DC</label>
+          <div class="inwrap"><input id="installedDC" type="number" step="any" min="0" placeholder="—"><span class="unit">MWp</span></div>
+        </div>
+        <div class="field">
+          <label for="gridLimit">Grid injection limit</label>
+          <div class="inwrap"><input id="gridLimit" type="number" step="any" min="0" value="52.8"><span class="unit">MW</span></div>
+        </div>
+        <div class="field">
+          <label for="powerFactor">Power factor at grid</label>
+          <div class="inwrap"><input id="powerFactor" type="number" step="0.001" min="0.5" max="1" value="0.95"><span class="unit">cos&nbsp;φ</span></div>
+        </div>
+        <div class="field">
+          <label for="pfSense">PF sense</label>
+          <div class="inwrap"><select id="pfSense"><option>Leading</option><option>Lagging</option></select></div>
+        </div>
+      </div>
+      <div class="derived">
+        <div class="chip"><span class="k">MVA rating of plant</span><span class="v" id="outMVA">—<small>MVA</small></span></div>
+        <div class="chip"><span class="k">MVAr demand (grid PF)</span><span class="v" id="outQGrid">—<small>MVAr</small></span></div>
+      </div>
+    </section>
+
+    <!-- Step 2 -->
+    <section class="card">
+      <h2><span class="stepno">STEP 2</span> Transformer reactive consumption</h2>
+      <p class="sub">Each transformer group consumes reactive power through its impedance: Q = count × rating × Z%. Add or remove groups to match the single-line diagram.</p>
+      <div class="rowscroll">
+        <table class="rows" id="xmerTable">
+          <thead>
+            <tr><th>Group</th><th>Qty</th><th>Rating (kVA)</th><th>Impedance (%)</th><th style="text-align:right">Demand (kVAr)</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button class="addrow" id="addXmer" type="button">+ Add transformer group</button>
+      <div class="fields" style="margin-top:16px">
+        <div class="field">
+          <label for="xmerMargin">Design margin on transformer demand</label>
+          <div class="inwrap"><input id="xmerMargin" type="number" step="1" min="0" value="10"><span class="unit">%</span></div>
+        </div>
+      </div>
+      <div class="derived">
+        <div class="chip"><span class="k">Transformer demand (incl. margin)</span><span class="v" id="outQXmer">—<small>MVAr</small></span></div>
+        <div class="chip"><span class="k">Total reactive demand</span><span class="v" id="outQTotal">—<small>MVAr</small></span></div>
+      </div>
+    </section>
+
+    <!-- Step 3 -->
+    <section class="card">
+      <h2><span class="stepno">STEP 3</span> Internal system losses</h2>
+      <p class="sub">Loss fractions (from the PVsyst report) applied to the grid injection limit. The plant must generate the limit plus these losses.</p>
+      <div class="rowscroll">
+        <table class="rows" id="lossTable">
+          <thead>
+            <tr><th>Loss source</th><th>Fraction (%)</th><th style="text-align:right">Loss (MW)</th><th></th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button class="addrow" id="addLoss" type="button">+ Add loss source</button>
+      <div class="derived">
+        <div class="chip"><span class="k">Total system losses</span><span class="v" id="outLosses">—<small>MW</small></span></div>
+        <div class="chip"><span class="k">Capacity to be considered</span><span class="v" id="outPTotal">—<small>MW</small></span></div>
+      </div>
+    </section>
+
+    <!-- Step 4 -->
+    <section class="card">
+      <h2><span class="stepno">STEP 4</span> Inverter capability &amp; compensation</h2>
+      <p class="sub">Operating inverters below unity power factor frees reactive capability: Q = √(S² − P²) per unit. Goal Seek finds the power factor that meets both the active and reactive requirement with the fewest inverters — no spreadsheet What-If needed.</p>
+      <div class="fields">
+        <div class="field">
+          <label for="invKVA">Inverter apparent power</label>
+          <div class="inwrap"><input id="invKVA" type="number" step="any" min="1" value="363"><span class="unit">kVA</span></div>
+        </div>
+        <div class="field">
+          <label for="invPF">PF at inverter level</label>
+          <div class="inwrap"><input id="invPF" type="number" step="0.0001" min="0.5" max="0.9999" value="0.918"><span class="unit">cos&nbsp;φ</span></div>
+        </div>
+        <div class="field">
+          <label for="capBank">Capacitor bank</label>
+          <div class="inwrap"><input id="capBank" type="number" step="any" min="0" value="0"><span class="unit">MVAr</span></div>
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="primary" id="goalSeek" type="button" style="width:100%">Goal-seek inverter PF</button>
+        </div>
+      </div>
+      <div class="note" id="goalSeekNote" hidden></div>
+      <div class="derived">
+        <div class="chip"><span class="k">Active power / inverter</span><span class="v" id="outInvP">—<small>kW</small></span></div>
+        <div class="chip"><span class="k">Reactive capability / inverter</span><span class="v" id="outInvQ">—<small>kVAr</small></span></div>
+        <div class="chip"><span class="k">Q for inverters (after cap bank)</span><span class="v" id="outQInv">—<small>MVAr</small></span></div>
+        <div class="chip"><span class="k">Required inverters</span><span class="v" id="outNInv">—<small>nos.</small></span></div>
+      </div>
+      <div class="note">A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. (The original worksheet added it to the demand — corrected here.)</div>
+    </section>
+
+  </div>
+
+  <!-- Results rail -->
+  <aside class="col rail">
+
+    <section class="card">
+      <h2>Final sizing</h2>
+      <div class="stat3">
+        <div class="stat p"><span class="k">Active P</span><span class="v" id="statP">—</span><span class="u">MW</span></div>
+        <div class="stat q"><span class="k">Reactive Q</span><span class="v" id="statQ">—</span><span class="u">MVAr</span></div>
+        <div class="stat s"><span class="k">Apparent S</span><span class="v" id="statS">—</span><span class="u">MVA</span></div>
+      </div>
+      <figure style="margin-top:14px">
+        <svg id="triangle" viewBox="0 0 360 210" role="img" aria-label="Power triangle: active, reactive and apparent power"></svg>
+        <figcaption>Power triangle at the plant terminals (losses included).</figcaption>
+      </figure>
+    </section>
+
+    <section class="card">
+      <h2>Reactive demand breakdown</h2>
+      <div class="bars" id="qBars"></div>
+    </section>
+
+    <section class="card">
+      <h2>Grid delivery check</h2>
+      <div class="check" id="deliveryCheck">
+        <span class="icon-mark" id="deliveryIcon">•</span>
+        <div class="msg" id="deliveryMsg">—</div>
+      </div>
+      <div style="margin-top:12px">
+        <div class="kv"><span class="k">Power delivered by inverters (net of losses)</span><span class="v" id="kvDelivered">—</span></div>
+        <div class="kv"><span class="k">Grid injection limit</span><span class="v" id="kvLimit">—</span></div>
+        <div class="kv"><span class="k">Headroom</span><span class="v" id="kvHeadroom">—</span></div>
+        <div class="kv"><span class="k">Reactive compensated (inverters + cap bank)</span><span class="v" id="kvQComp">—</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Scenario</h2>
+      <div class="actions">
+        <button id="btnExport" type="button">Export JSON</button>
+        <button id="btnImport" type="button">Import JSON</button>
+        <button id="btnPrint" type="button">Print report</button>
+        <button id="btnReset" type="button">Reset to Belvior defaults</button>
+      </div>
+      <input id="fileImport" type="file" accept="application/json" hidden>
+      <div class="note" style="margin-top:12px">Inputs autosave in this browser. Export a JSON file to archive or share a scenario.</div>
+    </section>
+
+  </aside>
+</main>
+
+<script>
+"use strict";
+
+/* ---------- defaults (from the Belvior worksheet) ---------- */
+const DEFAULTS = {
+  projectName: "Belvior",
+  installedDC: null,
+  gridLimit: 52.8,
+  powerFactor: 0.95,
+  pfSense: "Leading",
+  xmerMargin: 10,
+  invKVA: 363,
+  invPF: 0.918,
+  capBank: 0,
+  xmers: [
+    { name: "TS Block 1", qty: 3, rating: 10164, z: 9.5 },
+    { name: "TS Block 2", qty: 4, rating: 7260, z: 9.5 },
+    { name: "Auxiliary transformer (MCR)", qty: 1, rating: 500, z: 4.5 },
+  ],
+  losses: [
+    { name: "AC cable loss", pct: 1.0 },
+    { name: "Auxiliary system loss (string inverters)", pct: 1.0 },
+    { name: "Transmission line loss", pct: 0.3 },
+    { name: "Miscellaneous losses", pct: 1.0 },
+  ],
+};
+
+const STORE_KEY = "rpc-sizing-v1";
+let state = load();
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && Array.isArray(s.xmers) && Array.isArray(s.losses)) return s;
+    }
+  } catch (e) { /* corrupted store — fall through to defaults */ }
+  return structuredClone(DEFAULTS);
+}
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+/* ---------- calculation model ---------- */
+function compute(s) {
+  const P = num(s.gridLimit);                    // MW
+  const pf = clamp(num(s.powerFactor), 0.01, 1);
+  const S_plant = pf > 0 ? P / pf : 0;           // MVA
+  const Q_grid = Math.sqrt(Math.max(0, S_plant * S_plant - P * P)); // MVAr
+
+  const xmers = s.xmers.map(x => ({
+    ...x,
+    kvar: num(x.qty) * num(x.rating) * num(x.z) / 100,
+  }));
+  const xmerSum = xmers.reduce((a, x) => a + x.kvar, 0);          // kVAr
+  const margin = 1 + num(s.xmerMargin) / 100;
+  const Q_xmer = xmerSum / 1000 * margin;                          // MVAr
+  const Q_total = Q_grid + Q_xmer;                                 // MVAr
+
+  const losses = s.losses.map(l => ({ ...l, mw: P * num(l.pct) / 100 }));
+  const lossSum = losses.reduce((a, l) => a + l.mw, 0);            // MW
+  const P_total = P + lossSum;                                     // MW
+  const S_actual = Math.hypot(P_total, Q_total);                   // MVA
+
+  const S_inv = num(s.invKVA);                                     // kVA
+  const pf_inv = clamp(num(s.invPF), 0.01, 0.9999);
+  const p_inv = S_inv * pf_inv;                                    // kW
+  const q_inv = Math.sqrt(Math.max(0, S_inv * S_inv - p_inv * p_inv)); // kVAr
+
+  const Q_capbank = Math.max(0, num(s.capBank));                   // MVAr
+  const Q_for_inv = Math.max(0, Q_total - Q_capbank);              // MVAr
+  const N = q_inv > 0 ? Math.ceil(Q_for_inv * 1000 / q_inv) : 0;
+  const P_delivered = N * p_inv / 1000 - lossSum;                  // MW at grid
+  const Q_compensated = (q_inv * N) / 1000 + Q_capbank;            // MVAr
+  const meets = P_delivered >= P - 1e-9 && N > 0;
+
+  return { P, pf, S_plant, Q_grid, xmers, xmerSum, Q_xmer, Q_total,
+           losses, lossSum, P_total, S_actual,
+           S_inv, pf_inv, p_inv, q_inv, Q_capbank, Q_for_inv,
+           N, P_delivered, Q_compensated, meets };
+}
+
+/* Analytic goal seek: the fewest inverters that can carry both the active
+   requirement (grid limit + losses) and the reactive requirement, then the
+   PF band that satisfies both at that count. */
+function goalSeek(s) {
+  const r = compute(s);
+  const P_req = (r.P + r.lossSum) * 1000;          // kW
+  const Q_req = r.Q_for_inv * 1000;                // kVAr
+  const S_inv = r.S_inv;
+  if (S_inv <= 0 || (P_req <= 0 && Q_req <= 0)) return null;
+  const N = Math.max(1, Math.ceil(Math.hypot(P_req, Q_req) / S_inv));
+  const NS = N * S_inv;
+  const pfMin = clamp(P_req / NS, 0.01, 0.9999);
+  const qRatio = Q_req / NS;
+  const pfMax = clamp(Math.sqrt(Math.max(0, 1 - qRatio * qRatio)), pfMin, 0.9999);
+  const pf = Math.round(((pfMin + pfMax) / 2) * 1e4) / 1e4;
+  return { N, pfMin, pfMax, pf: clamp(pf, pfMin, pfMax) };
+}
+
+function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; }
+function clamp(v, lo, hi) { return Math.min(hi, Math.max(lo, v)); }
+function fmt(v, dp = 2) {
+  if (!Number.isFinite(v)) return "—";
+  return v.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+}
+
+/* ---------- dynamic rows ---------- */
+function renderXmerRows() {
+  const tb = document.querySelector("#xmerTable tbody");
+  tb.innerHTML = "";
+  state.xmers.forEach((x, i) => {
+    const tr = document.createElement("tr");
+    tr.append(
+      cellInput(x.name, "text", v => { state.xmers[i].name = v; }, "Group name", 170),
+      cellInput(x.qty, "number", v => { state.xmers[i].qty = v; }, "Quantity", 62),
+      cellInput(x.rating, "number", v => { state.xmers[i].rating = v; }, "Rating kVA", 92),
+      cellInput(x.z, "number", v => { state.xmers[i].z = v; }, "Impedance %", 72),
+      outCell(`x-out-${i}`),
+      removeCell(() => { state.xmers.splice(i, 1); renderXmerRows(); update(); }, "Remove transformer group")
+    );
+    tb.append(tr);
+  });
+}
+function renderLossRows() {
+  const tb = document.querySelector("#lossTable tbody");
+  tb.innerHTML = "";
+  state.losses.forEach((l, i) => {
+    const tr = document.createElement("tr");
+    tr.append(
+      cellInput(l.name, "text", v => { state.losses[i].name = v; }, "Loss source", 230),
+      cellInput(l.pct, "number", v => { state.losses[i].pct = v; }, "Percent", 72),
+      outCell(`l-out-${i}`),
+      removeCell(() => { state.losses.splice(i, 1); renderLossRows(); update(); }, "Remove loss source")
+    );
+    tb.append(tr);
+  });
+}
+function cellInput(value, type, onChange, label, width) {
+  const td = document.createElement("td");
+  const wrap = document.createElement("div");
+  wrap.className = "inwrap";
+  const inp = document.createElement("input");
+  inp.type = type;
+  if (type === "number") { inp.step = "any"; inp.min = "0"; }
+  inp.value = value ?? "";
+  inp.setAttribute("aria-label", label);
+  inp.style.width = width + "px";
+  inp.addEventListener("input", () => { onChange(type === "number" ? num(inp.value) : inp.value); update(); });
+  wrap.append(inp);
+  td.append(wrap);
+  return td;
+}
+function outCell(id) {
+  const td = document.createElement("td");
+  td.className = "out";
+  td.id = id;
+  td.textContent = "—";
+  return td;
+}
+function removeCell(onClick, label) {
+  const td = document.createElement("td");
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "icon"; b.textContent = "✕";
+  b.setAttribute("aria-label", label);
+  b.addEventListener("click", onClick);
+  td.append(b);
+  return td;
+}
+
+/* ---------- power triangle ---------- */
+function drawTriangle(r) {
+  const svg = document.getElementById("triangle");
+  const css = getComputedStyle(document.documentElement);
+  const cP = css.getPropertyValue("--series-p").trim();
+  const cQ = css.getPropertyValue("--series-q").trim();
+  const cInk = css.getPropertyValue("--ink").trim();
+  const cMuted = css.getPropertyValue("--muted").trim();
+  const cGrid = css.getPropertyValue("--grid").trim();
+
+  const W = 360, H = 210, mL = 26, mR = 78, mT = 30, mB = 34;
+  const plotW = W - mL - mR, plotH = H - mT - mB;
+  const P = Math.max(r.P_total, 0.001), Q = Math.max(r.Q_total, 0);
+  const scale = Math.min(plotW / P, plotH / Math.max(Q, P * 0.25));
+  const px = P * scale, qy = Q * scale;
+  const x0 = mL, y0 = H - mB, x1 = x0 + px, y1 = y0 - qy;
+  const phi = Math.atan2(Q, P) * 180 / Math.PI;
+
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  svg.innerHTML = "";
+  // faint grid baseline
+  svg.append(el("line", { x1: x0 - 8, y1: y0, x2: W - 12, y2: y0, stroke: cGrid, "stroke-width": 1 }));
+  // angle arc
+  const arcR = Math.min(46, px * 0.45);
+  const ax = x0 + arcR * Math.cos(-phi * Math.PI / 180);
+  const ay = y0 + arcR * Math.sin(-phi * Math.PI / 180);
+  svg.append(el("path", { d: `M ${x0 + arcR} ${y0} A ${arcR} ${arcR} 0 0 0 ${ax} ${ay}`, fill: "none", stroke: cMuted, "stroke-width": 1.25 }));
+  svg.append(el("text", { x: x0 + arcR + 8, y: y0 - 8, fill: cMuted, "font-size": 10.5, "font-family": "ui-monospace, monospace" }, `φ = ${fmt(phi, 1)}°`));
+  // P
+  svg.append(el("line", { x1: x0, y1: y0, x2: x1, y2: y0, stroke: cP, "stroke-width": 3, "stroke-linecap": "round" }));
+  svg.append(el("text", { x: x0 + px / 2, y: y0 + 17, fill: cP, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `P ${fmt(r.P_total)} MW`));
+  // Q
+  svg.append(el("line", { x1: x1, y1: y0, x2: x1, y2: y1, stroke: cQ, "stroke-width": 3, "stroke-linecap": "round" }));
+  const qLbl = el("text", { x: x1 + 8, y: y0 - qy / 2 + 4, fill: cQ, "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" });
+  qLbl.append(el("tspan", { x: x1 + 8, dy: 0 }, `Q ${fmt(r.Q_total)}`));
+  qLbl.append(el("tspan", { x: x1 + 8, dy: 13 }, "MVAr"));
+  svg.append(qLbl);
+  // S
+  svg.append(el("line", { x1: x0, y1: y0, x2: x1, y2: y1, stroke: cInk, "stroke-width": 2, "stroke-dasharray": "6 4", "stroke-linecap": "round" }));
+  svg.append(el("text", { x: x0 + px / 2 - 8, y: y1 + (y0 - y1) / 2 - 10, fill: cInk, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `S ${fmt(r.S_actual)} MVA`));
+}
+
+/* ---------- render ---------- */
+function update() {
+  const r = compute(state);
+
+  setText("outMVA", fmt(r.S_plant), "MVA");
+  setText("outQGrid", fmt(r.Q_grid), "MVAr");
+  r.xmers.forEach((x, i) => { const c = document.getElementById(`x-out-${i}`); if (c) c.textContent = fmt(x.kvar, 1); });
+  setText("outQXmer", fmt(r.Q_xmer), "MVAr");
+  setText("outQTotal", fmt(r.Q_total), "MVAr");
+  r.losses.forEach((l, i) => { const c = document.getElementById(`l-out-${i}`); if (c) c.textContent = fmt(l.mw, 3); });
+  setText("outLosses", fmt(r.lossSum, 3), "MW");
+  setText("outPTotal", fmt(r.P_total), "MW");
+  setText("outInvP", fmt(r.p_inv, 1), "kW");
+  setText("outInvQ", fmt(r.q_inv, 1), "kVAr");
+  setText("outQInv", fmt(r.Q_for_inv), "MVAr");
+  setText("outNInv", String(r.N), "nos.");
+
+  document.getElementById("statP").textContent = fmt(r.P_total);
+  document.getElementById("statQ").textContent = fmt(r.Q_total);
+  document.getElementById("statS").textContent = fmt(r.S_actual);
+  drawTriangle(r);
+
+  // breakdown bars
+  const bars = document.getElementById("qBars");
+  const marginKvar = r.xmerSum * (num(state.xmerMargin) / 100);
+  const rows = [
+    { name: `Grid PF requirement (cos φ = ${fmt(r.pf, 3)} ${state.pfSense.toLowerCase()})`, v: r.Q_grid },
+    ...r.xmers.map(x => ({ name: x.name || "Transformer group", v: x.kvar / 1000 })),
+    { name: `Design margin (+${fmt(num(state.xmerMargin), 0)}% on transformers)`, v: marginKvar / 1000 },
+  ];
+  const maxV = Math.max(r.Q_total, ...rows.map(b => b.v), 0.001);
+  bars.innerHTML = "";
+  rows.concat([{ name: "Total reactive demand", v: r.Q_total, total: true }]).forEach(b => {
+    const row = document.createElement("div");
+    row.className = "bar-row" + (b.total ? " total" : "");
+    row.innerHTML = `
+      <div class="bar-head"><span>${escapeHtml(b.name)}</span><span class="val">${fmt(b.v)} MVAr</span></div>
+      <div class="bar-track"><div class="bar-fill" style="width:${(b.v / maxV * 100).toFixed(2)}%"></div></div>`;
+    bars.append(row);
+  });
+
+  // delivery check
+  const check = document.getElementById("deliveryCheck");
+  const icon = document.getElementById("deliveryIcon");
+  const msg = document.getElementById("deliveryMsg");
+  const headroom = r.P_delivered - r.P;
+  check.className = "check " + (r.meets ? "good" : "crit");
+  icon.textContent = r.meets ? "✓" : "✕";
+  const g = goalSeek(state);
+  let oversize = "";
+  if (r.meets && g && r.N > g.N) {
+    oversize = ` <span style="color:var(--warn)">Note: the same demand is met with only <b>${g.N}</b> inverters at cos φ ${fmt(g.pfMin, 4)}–${fmt(g.pfMax, 4)} — run Goal Seek.</span>`;
+  }
+  msg.innerHTML = r.meets
+    ? `<b>${r.N}</b> inverters at cos φ <b>${fmt(r.pf_inv, 4)}</b> deliver <b>${fmt(r.P_delivered)} MW</b> to the grid — meets the ${fmt(r.P)} MW injection limit while compensating <b>${fmt(r.Q_compensated)} MVAr</b>.${oversize}`
+    : `Delivered power <b>${fmt(r.P_delivered)} MW</b> falls short of the ${fmt(r.P)} MW grid injection limit. Raise the inverter power factor, add a capacitor bank, or run Goal Seek.`;
+  document.getElementById("kvDelivered").textContent = fmt(r.P_delivered) + " MW";
+  document.getElementById("kvLimit").textContent = fmt(r.P) + " MW";
+  document.getElementById("kvHeadroom").textContent = (headroom >= 0 ? "+" : "") + fmt(headroom, 3) + " MW";
+  document.getElementById("kvQComp").textContent = fmt(r.Q_compensated) + " MVAr";
+
+  const pill = document.getElementById("headerPill");
+  pill.className = "pill " + (r.meets ? "good" : "crit");
+  document.getElementById("headerPillText").textContent = r.meets
+    ? `SIZED — ${r.N} inverters · ${fmt(r.Q_total)} MVAr`
+    : "UNDER-DELIVERS — adjust PF";
+
+  save();
+}
+function setText(id, v, unit) {
+  const e = document.getElementById(id);
+  e.innerHTML = `${v}<small>${unit}</small>`;
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* ---------- wiring ---------- */
+function bind(id, key, isNumber = true) {
+  const el = document.getElementById(id);
+  el.value = state[key] ?? "";
+  el.addEventListener("input", () => {
+    state[key] = isNumber ? (el.value === "" ? null : num(el.value)) : el.value;
+    update();
+  });
+}
+bind("projectName", "projectName", false);
+bind("installedDC", "installedDC");
+bind("gridLimit", "gridLimit");
+bind("powerFactor", "powerFactor");
+bind("pfSense", "pfSense", false);
+bind("xmerMargin", "xmerMargin");
+bind("invKVA", "invKVA");
+bind("invPF", "invPF");
+bind("capBank", "capBank");
+
+document.getElementById("addXmer").addEventListener("click", () => {
+  state.xmers.push({ name: `Transformer group ${state.xmers.length + 1}`, qty: 1, rating: 1000, z: 6 });
+  renderXmerRows(); update();
+});
+document.getElementById("addLoss").addEventListener("click", () => {
+  state.losses.push({ name: "Additional loss", pct: 0.5 });
+  renderLossRows(); update();
+});
+
+document.getElementById("goalSeek").addEventListener("click", () => {
+  const g = goalSeek(state);
+  const note = document.getElementById("goalSeekNote");
+  if (!g) { note.hidden = false; note.className = "note"; note.textContent = "Goal Seek needs a positive inverter rating and a non-zero requirement."; return; }
+  state.invPF = g.pf;
+  document.getElementById("invPF").value = g.pf;
+  note.hidden = false;
+  note.className = "note accent";
+  note.innerHTML = `Goal Seek: minimum <span class="mono">${g.N}</span> inverters. Any cos φ in
+    <span class="mono">${fmt(g.pfMin, 4)} – ${fmt(g.pfMax, 4)}</span> meets both requirements;
+    set to midpoint <span class="mono">${fmt(g.pf, 4)}</span>.`;
+  update();
+});
+
+document.getElementById("btnExport").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${(state.projectName || "scenario").replace(/[^\w-]+/g, "_")}_reactive_power.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+document.getElementById("btnImport").addEventListener("click", () => document.getElementById("fileImport").click());
+document.getElementById("fileImport").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    const s = JSON.parse(await f.text());
+    if (!s || !Array.isArray(s.xmers) || !Array.isArray(s.losses)) throw new Error("bad shape");
+    state = s;
+    initAll();
+  } catch (err) {
+    alert("That file isn't a scenario export from this app.");
+  }
+  e.target.value = "";
+});
+document.getElementById("btnPrint").addEventListener("click", () => window.print());
+document.getElementById("btnReset").addEventListener("click", () => {
+  if (!confirm("Replace all current inputs with the Belvior worksheet defaults?")) return;
+  state = structuredClone(DEFAULTS);
+  initAll();
+});
+
+function initAll() {
+  ["projectName","installedDC","gridLimit","powerFactor","pfSense","xmerMargin","invKVA","invPF","capBank"]
+    .forEach(id => { document.getElementById(id).value = state[id] ?? ""; });
+  renderXmerRows();
+  renderLossRows();
+  update();
+}
+initAll();
+
+if (window.matchMedia) {
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", update);
+}
+new MutationObserver(update).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+</script>
+</body>
+</html>
