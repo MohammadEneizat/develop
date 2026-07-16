@@ -44,6 +44,13 @@ apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
   0.918 falls inside this band).
 - **Dynamic rows** — add or remove transformer groups and loss sources instead
   of a fixed layout with empty blocks.
+- **Controllable inverter count** — leave the count blank to auto-size from the
+  reactive demand (the worksheet's behaviour), or fix it to the number the
+  plant actually has. All downstream results (delivered power, reactive
+  coverage, the voltage sweep) then use the fixed count, shortfalls in either
+  active or reactive terms are flagged, and Goal Seek solves the feasible
+  power-factor band at that count (or reports the minimum viable count when
+  none exists).
 - **Capacitor bank corrected** — a capacitor bank now *reduces* the reactive
   power the inverters must supply (the worksheet added it to the demand).
 - **Validation** — a live pass/fail grid-delivery check, plus an over-sizing

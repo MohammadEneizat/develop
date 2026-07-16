@@ -424,6 +424,10 @@
           <div class="inwrap"><input id="capBank" type="number" step="any" min="0" value="0"><span class="unit">MVAr</span></div>
         </div>
         <div class="field">
+          <label for="invCount">Number of inverters</label>
+          <div class="inwrap"><input id="invCount" type="number" step="1" min="0" placeholder="auto"><span class="unit">nos.</span></div>
+        </div>
+        <div class="field">
           <label>&nbsp;</label>
           <button class="primary" id="goalSeek" type="button" style="width:100%">Goal-seek inverter PF</button>
         </div>
@@ -433,9 +437,10 @@
         <div class="chip"><span class="k">Active power / inverter</span><span class="v" id="outInvP">—<small>kW</small></span></div>
         <div class="chip"><span class="k">Reactive capability / inverter</span><span class="v" id="outInvQ">—<small>kVAr</small></span></div>
         <div class="chip"><span class="k">Q for inverters (after cap bank)</span><span class="v" id="outQInv">—<small>MVAr</small></span></div>
-        <div class="chip"><span class="k">Required inverters</span><span class="v" id="outNInv">—<small>nos.</small></span></div>
+        <div class="chip"><span class="k">Minimum required (auto)</span><span class="v" id="outNReq">—<small>nos.</small></span></div>
+        <div class="chip"><span class="k">Inverters in design</span><span class="v" id="outNInv">—<small>nos.</small></span></div>
       </div>
-      <div class="note">A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. (The original worksheet added it to the demand — corrected here.)</div>
+      <div class="note">Leave <em>Number of inverters</em> blank to auto-size from the reactive demand, or enter the count your plant actually has — every downstream result (delivered power, reactive coverage, the voltage sweep) then uses your number, and shortfalls are flagged. A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. (The original worksheet added it to the demand — corrected here.)</div>
     </section>
 
     <!-- Step 5 -->
@@ -493,6 +498,7 @@
         <div class="msg" id="deliveryMsg">—</div>
       </div>
       <div style="margin-top:12px">
+        <div class="kv"><span class="k">Inverters in design</span><span class="v" id="kvInv">—</span></div>
         <div class="kv"><span class="k">Power delivered by inverters (net of losses)</span><span class="v" id="kvDelivered">—</span></div>
         <div class="kv"><span class="k">Grid injection limit</span><span class="v" id="kvLimit">—</span></div>
         <div class="kv"><span class="k">Headroom</span><span class="v" id="kvHeadroom">—</span></div>
@@ -529,6 +535,7 @@ const DEFAULTS = {
   invKVA: 363,
   invPF: 0.918,
   capBank: 0,
+  invCountOverride: null,
   voltLevels: [0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15],
   xmers: [
     { name: "TS Block 1", qty: 3, rating: 10164, z: 9.5 },
@@ -591,33 +598,42 @@ function compute(s) {
 
   const Q_capbank = Math.max(0, num(s.capBank));                   // MVAr
   const Q_for_inv = Math.max(0, Q_total - Q_capbank);              // MVAr
-  const N = q_inv > 0 ? Math.ceil(Q_for_inv * 1000 / q_inv) : 0;
+  const N_req = q_inv > 0 ? Math.ceil(Q_for_inv * 1000 / q_inv) : 0;
+  const ovr = s.invCountOverride;
+  const manualN = ovr != null && ovr !== "" && num(ovr) > 0;
+  const N = manualN ? Math.round(num(ovr)) : N_req;
   const P_delivered = N * p_inv / 1000 - lossSum;                  // MW at grid
   const Q_compensated = (q_inv * N) / 1000 + Q_capbank;            // MVAr
-  const meets = P_delivered >= P - 1e-9 && N > 0;
+  const meetsP = P_delivered >= P - 1e-9 && N > 0;
+  const meetsQ = Q_compensated >= Q_total - 1e-9;
+  const meets = meetsP && meetsQ;
 
   return { P, pf, S_plant, Q_grid, xmers, xmerSum, Q_xmer, Q_total,
            losses, lossSum, P_total, S_actual,
            S_inv, pf_inv, p_inv, q_inv, Q_capbank, Q_for_inv,
-           N, P_delivered, Q_compensated, meets };
+           N_req, manualN, N, P_delivered, Q_compensated, meetsP, meetsQ, meets };
 }
 
 /* Analytic goal seek: the fewest inverters that can carry both the active
    requirement (grid limit + losses) and the reactive requirement, then the
-   PF band that satisfies both at that count. */
+   PF band that satisfies both at that count. When the inverter count is
+   fixed by the user, it solves for the PF band at that count instead, and
+   reports infeasibility (with the minimum viable count) if none exists. */
 function goalSeek(s) {
   const r = compute(s);
   const P_req = (r.P + r.lossSum) * 1000;          // kW
   const Q_req = r.Q_for_inv * 1000;                // kVAr
   const S_inv = r.S_inv;
   if (S_inv <= 0 || (P_req <= 0 && Q_req <= 0)) return null;
-  const N = Math.max(1, Math.ceil(Math.hypot(P_req, Q_req) / S_inv));
+  const Nmin = Math.max(1, Math.ceil(Math.hypot(P_req, Q_req) / S_inv));
+  const N = r.manualN ? r.N : Nmin;
+  if (N < Nmin) return { infeasible: true, N, Nmin };
   const NS = N * S_inv;
   const pfMin = clamp(P_req / NS, 0.01, 0.9999);
   const qRatio = Q_req / NS;
   const pfMax = clamp(Math.sqrt(Math.max(0, 1 - qRatio * qRatio)), pfMin, 0.9999);
   const pf = Math.round(((pfMin + pfMax) / 2) * 1e4) / 1e4;
-  return { N, pfMin, pfMax, pf: clamp(pf, pfMin, pfMax) };
+  return { N, Nmin, fixed: r.manualN, pfMin, pfMax, pf: clamp(pf, pfMin, pfMax) };
 }
 
 /* Voltage sweep: per-inverter apparent power follows the current limit below
@@ -872,7 +888,8 @@ function update() {
   setText("outInvP", fmt(r.p_inv, 1), "kW");
   setText("outInvQ", fmt(r.q_inv, 1), "kVAr");
   setText("outQInv", fmt(r.Q_for_inv), "MVAr");
-  setText("outNInv", String(r.N), "nos.");
+  setText("outNReq", String(r.N_req), "nos.");
+  setText("outNInv", String(r.N), r.manualN ? "nos. · fixed" : "nos. · auto");
 
   document.getElementById("statP").textContent = fmt(r.P_total);
   document.getElementById("statQ").textContent = fmt(r.Q_total);
@@ -910,13 +927,23 @@ function update() {
   check.className = "check " + (r.meets ? "good" : "crit");
   icon.textContent = r.meets ? "✓" : "✕";
   const g = goalSeek(state);
-  let oversize = "";
-  if (r.meets && g && r.N > g.N) {
-    oversize = ` <span style="color:var(--warn)">Note: the same demand is met with only <b>${g.N}</b> inverters at cos φ ${fmt(g.pfMin, 4)}–${fmt(g.pfMax, 4)} — run Goal Seek.</span>`;
+  const fixedTag = r.manualN ? " (fixed)" : "";
+  if (r.meets) {
+    let oversize = "";
+    if (g && !g.infeasible && r.N > g.Nmin) {
+      oversize = ` <span style="color:var(--warn)">Note: the same demand is met with only <b>${g.Nmin}</b> inverters${r.manualN ? "" : ` at cos φ ${fmt(g.pfMin, 4)}–${fmt(g.pfMax, 4)} — run Goal Seek`}.</span>`;
+    }
+    msg.innerHTML = `<b>${r.N}</b> inverters${fixedTag} at cos φ <b>${fmt(r.pf_inv, 4)}</b> deliver <b>${fmt(r.P_delivered)} MW</b> to the grid — meets the ${fmt(r.P)} MW injection limit while compensating <b>${fmt(r.Q_compensated)} MVAr</b>.${oversize}`;
+  } else {
+    const reasons = [];
+    if (!r.meetsP) reasons.push(`delivered power <b>${fmt(r.P_delivered)} MW</b> falls short of the ${fmt(r.P)} MW injection limit`);
+    if (!r.meetsQ) reasons.push(`reactive coverage <b>${fmt(r.Q_compensated)} MVAr</b> falls short of the ${fmt(r.Q_total)} MVAr demand`);
+    const advice = g && g.infeasible
+      ? `At cos φ that meets both requirements, at least <b>${g.Nmin}</b> inverters are needed — increase the count or add a capacitor bank.`
+      : `Run Goal Seek to find a power factor that meets both requirements${r.manualN ? " at your fixed count" : ""}.`;
+    msg.innerHTML = `With <b>${r.N}</b> inverters${fixedTag}: ${reasons.join("; ")}. ${advice}`;
   }
-  msg.innerHTML = r.meets
-    ? `<b>${r.N}</b> inverters at cos φ <b>${fmt(r.pf_inv, 4)}</b> deliver <b>${fmt(r.P_delivered)} MW</b> to the grid — meets the ${fmt(r.P)} MW injection limit while compensating <b>${fmt(r.Q_compensated)} MVAr</b>.${oversize}`
-    : `Delivered power <b>${fmt(r.P_delivered)} MW</b> falls short of the ${fmt(r.P)} MW grid injection limit. Raise the inverter power factor, add a capacitor bank, or run Goal Seek.`;
+  document.getElementById("kvInv").textContent = r.manualN ? `${r.N} (fixed · min ${r.N_req})` : `${r.N} (auto)`;
   document.getElementById("kvDelivered").textContent = fmt(r.P_delivered) + " MW";
   document.getElementById("kvLimit").textContent = fmt(r.P) + " MW";
   document.getElementById("kvHeadroom").textContent = (headroom >= 0 ? "+" : "") + fmt(headroom, 3) + " MW";
@@ -925,8 +952,8 @@ function update() {
   const pill = document.getElementById("headerPill");
   pill.className = "pill " + (r.meets ? "good" : "crit");
   document.getElementById("headerPillText").textContent = r.meets
-    ? `SIZED — ${r.N} inverters · ${fmt(r.Q_total)} MVAr`
-    : "UNDER-DELIVERS — adjust PF";
+    ? `SIZED — ${r.N} inverters${r.manualN ? " (fixed)" : ""} · ${fmt(r.Q_total)} MVAr`
+    : (r.meetsP ? "REACTIVE SHORTFALL" : "UNDER-DELIVERS") + " — adjust PF or count";
 
   save();
 }
@@ -957,6 +984,12 @@ bind("invKVA", "invKVA");
 bind("invPF", "invPF");
 bind("capBank", "capBank");
 
+const invCountInput = document.getElementById("invCount");
+invCountInput.addEventListener("input", () => {
+  state.invCountOverride = invCountInput.value === "" ? null : Math.max(0, Math.round(num(invCountInput.value)));
+  update();
+});
+
 const voltInput = document.getElementById("voltLevels");
 voltInput.addEventListener("input", () => {
   state.voltLevels = voltInput.value.split(/[,;\s]+/).map(parseFloat).filter(v => Number.isFinite(v) && v > 0);
@@ -975,12 +1008,19 @@ document.getElementById("addLoss").addEventListener("click", () => {
 document.getElementById("goalSeek").addEventListener("click", () => {
   const g = goalSeek(state);
   const note = document.getElementById("goalSeekNote");
-  if (!g) { note.hidden = false; note.className = "note"; note.textContent = "Goal Seek needs a positive inverter rating and a non-zero requirement."; return; }
+  note.hidden = false;
+  if (!g) { note.className = "note"; note.textContent = "Goal Seek needs a positive inverter rating and a non-zero requirement."; return; }
+  if (g.infeasible) {
+    note.className = "note";
+    note.innerHTML = `No power factor works with <span class="mono">${g.N}</span> inverters — at least
+      <span class="mono">${g.Nmin}</span> are needed for both requirements. Increase the count
+      (or clear it for auto), or add a capacitor bank.`;
+    return;
+  }
   state.invPF = g.pf;
   document.getElementById("invPF").value = g.pf;
-  note.hidden = false;
   note.className = "note accent";
-  note.innerHTML = `Goal Seek: minimum <span class="mono">${g.N}</span> inverters. Any cos φ in
+  note.innerHTML = `Goal Seek: ${g.fixed ? `at your fixed <span class="mono">${g.N}</span> inverters (minimum ${g.Nmin})` : `minimum <span class="mono">${g.N}</span> inverters`}. Any cos φ in
     <span class="mono">${fmt(g.pfMin, 4)} – ${fmt(g.pfMax, 4)}</span> meets both requirements;
     set to midpoint <span class="mono">${fmt(g.pf, 4)}</span>.`;
   update();
@@ -1020,6 +1060,7 @@ function initAll() {
     .forEach(id => { document.getElementById(id).value = state[id] ?? ""; });
   if (!Array.isArray(state.voltLevels) || !state.voltLevels.length) state.voltLevels = [...DEFAULTS.voltLevels];
   document.getElementById("voltLevels").value = state.voltLevels.join(", ");
+  document.getElementById("invCount").value = state.invCountOverride ?? "";
   renderXmerRows();
   renderLossRows();
   update();
