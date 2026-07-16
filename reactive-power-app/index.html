@@ -420,6 +420,10 @@
           <div class="inwrap"><input id="invPF" type="number" step="0.0001" min="0.5" max="0.9999" value="0.918"><span class="unit">cos&nbsp;φ</span></div>
         </div>
         <div class="field">
+          <label for="invQ">Reactive capability / inverter</label>
+          <div class="inwrap"><input id="invQ" type="number" step="any" min="0" placeholder="auto (from PF)"><span class="unit">kVAr</span></div>
+        </div>
+        <div class="field">
           <label for="capBank">Capacitor bank</label>
           <div class="inwrap"><input id="capBank" type="number" step="any" min="0" value="0"><span class="unit">MVAr</span></div>
         </div>
@@ -433,6 +437,12 @@
         </div>
       </div>
       <div class="note" id="goalSeekNote" hidden></div>
+      <div class="note" id="qOvrNote" hidden></div>
+      <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center">
+        <button id="btnPdf" type="button">📄 Read capability from datasheet (PDF)</button>
+        <input id="pdfFile" type="file" accept="application/pdf" hidden>
+      </div>
+      <div class="note" id="pdfResult" hidden></div>
       <div class="derived">
         <div class="chip"><span class="k">Active power / inverter</span><span class="v" id="outInvP">—<small>kW</small></span></div>
         <div class="chip"><span class="k">Reactive capability / inverter</span><span class="v" id="outInvQ">—<small>kVAr</small></span></div>
@@ -440,7 +450,7 @@
         <div class="chip"><span class="k">Minimum required (auto)</span><span class="v" id="outNReq">—<small>nos.</small></span></div>
         <div class="chip"><span class="k">Inverters in design</span><span class="v" id="outNInv">—<small>nos.</small></span></div>
       </div>
-      <div class="note">Leave <em>Number of inverters</em> blank to auto-size from the reactive demand, or enter the count your plant actually has — every downstream result (delivered power, reactive coverage, the voltage sweep) then uses your number, and shortfalls are flagged. A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. (The original worksheet added it to the demand — corrected here.)</div>
+      <div class="note">Leave <em>Reactive capability</em> blank to derive it from the apparent power and power factor (√(S² − P²)), or enter the datasheet value directly if the manufacturer states it. Leave <em>Number of inverters</em> blank to auto-size from the reactive demand, or enter the count your plant actually has — every downstream result (delivered power, reactive coverage, the voltage sweep) then uses your numbers, and shortfalls are flagged. A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. (The original worksheet added it to the demand — corrected here.)</div>
     </section>
 
     <!-- Step 5 -->
@@ -536,6 +546,8 @@ const DEFAULTS = {
   invPF: 0.918,
   capBank: 0,
   invCountOverride: null,
+  invQOverride: null,
+  datasheet: null,
   voltLevels: [0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15],
   xmers: [
     { name: "TS Block 1", qty: 3, rating: 10164, z: 9.5 },
@@ -594,11 +606,22 @@ function compute(s) {
   const S_inv = num(s.invKVA);                                     // kVA
   const pf_inv = clamp(num(s.invPF), 0.01, 0.9999);
   const p_inv = S_inv * pf_inv;                                    // kW
-  const q_inv = Math.sqrt(Math.max(0, S_inv * S_inv - p_inv * p_inv)); // kVAr
+  const q_derived = Math.sqrt(Math.max(0, S_inv * S_inv - p_inv * p_inv)); // kVAr
+  const qo = s.invQOverride;
+  const qOvr = qo != null && qo !== "" && num(qo) > 0;
+  const q_inv = qOvr ? num(qo) : q_derived;                        // kVAr
+  // a datasheet Q beyond sqrt(S^2-P^2) implies the machine supports that
+  // operating point; the effective apparent limit scales the voltage sweep
+  const S_eff = qOvr ? Math.max(S_inv, Math.hypot(p_inv, q_inv)) : S_inv;
 
   const Q_capbank = Math.max(0, num(s.capBank));                   // MVAr
   const Q_for_inv = Math.max(0, Q_total - Q_capbank);              // MVAr
-  const N_req = q_inv > 0 ? Math.ceil(Q_for_inv * 1000 / q_inv) : 0;
+  // auto count must satisfy both the reactive demand and the active delivery
+  // requirement at the chosen PF (identical to the worksheet's reactive-only
+  // count whenever the PF is goal-seeked, e.g. 164 for the Belvior defaults)
+  const N_q = q_inv > 0 ? Math.ceil(Q_for_inv * 1000 / q_inv) : 0;
+  const N_p = p_inv > 0 ? Math.ceil((P + lossSum) * 1000 / p_inv) : 0;
+  const N_req = Math.max(N_q, N_p);
   const ovr = s.invCountOverride;
   const manualN = ovr != null && ovr !== "" && num(ovr) > 0;
   const N = manualN ? Math.round(num(ovr)) : N_req;
@@ -610,7 +633,7 @@ function compute(s) {
 
   return { P, pf, S_plant, Q_grid, xmers, xmerSum, Q_xmer, Q_total,
            losses, lossSum, P_total, S_actual,
-           S_inv, pf_inv, p_inv, q_inv, Q_capbank, Q_for_inv,
+           S_inv, pf_inv, p_inv, q_derived, qOvr, q_inv, S_eff, Q_capbank, Q_for_inv,
            N_req, manualN, N, P_delivered, Q_compensated, meetsP, meetsQ, meets };
 }
 
@@ -625,15 +648,29 @@ function goalSeek(s) {
   const Q_req = r.Q_for_inv * 1000;                // kVAr
   const S_inv = r.S_inv;
   if (S_inv <= 0 || (P_req <= 0 && Q_req <= 0)) return null;
-  const Nmin = Math.max(1, Math.ceil(Math.hypot(P_req, Q_req) / S_inv));
+  let Nmin;
+  if (r.qOvr) {
+    // fixed datasheet Q per inverter: reactive and active constraints separate
+    if (r.q_inv <= 0) return null;
+    Nmin = Math.max(1, Math.ceil(Q_req / r.q_inv), Math.ceil(P_req / (S_inv * 0.9999)));
+  } else {
+    Nmin = Math.max(1, Math.ceil(Math.hypot(P_req, Q_req) / S_inv));
+  }
   const N = r.manualN ? r.N : Nmin;
   if (N < Nmin) return { infeasible: true, N, Nmin };
   const NS = N * S_inv;
-  const pfMin = clamp(P_req / NS, 0.01, 0.9999);
-  const qRatio = Q_req / NS;
-  const pfMax = clamp(Math.sqrt(Math.max(0, 1 - qRatio * qRatio)), pfMin, 0.9999);
+  let pfMin, pfMax;
+  if (r.qOvr) {
+    if (P_req / NS > 0.9999 || N * r.q_inv < Q_req - 1e-9) return { infeasible: true, N, Nmin };
+    pfMin = clamp(P_req / NS, 0.01, 0.9999);
+    pfMax = 0.9999; // PF no longer trades against Q — capability is fixed
+  } else {
+    pfMin = clamp(P_req / NS, 0.01, 0.9999);
+    const qRatio = Q_req / NS;
+    pfMax = clamp(Math.sqrt(Math.max(0, 1 - qRatio * qRatio)), pfMin, 0.9999);
+  }
   const pf = Math.round(((pfMin + pfMax) / 2) * 1e4) / 1e4;
-  return { N, Nmin, fixed: r.manualN, pfMin, pfMax, pf: clamp(pf, pfMin, pfMax) };
+  return { N, Nmin, fixed: r.manualN, qFixed: r.qOvr, pfMin, pfMax, pf: clamp(pf, pfMin, pfMax) };
 }
 
 /* Voltage sweep: per-inverter apparent power follows the current limit below
@@ -644,9 +681,9 @@ function voltageSweep(s, r) {
   const levels = (Array.isArray(s.voltLevels) ? s.voltLevels : [])
     .map(num).filter(v => v > 0).sort((a, b) => a - b);
   return levels.map(V => {
-    const S_v = r.S_inv * Math.min(V, 1);                 // kVA available
+    const S_v = r.S_eff * Math.min(V, 1);                 // kVA available
     const curtailed = S_v < r.p_inv - 1e-9;               // can't even carry P
-    const q_v = curtailed ? 0 : Math.sqrt(Math.max(0, S_v * S_v - r.p_inv * r.p_inv)); // kVAr
+    const q_v = curtailed ? 0 : Math.min(r.q_inv, Math.sqrt(Math.max(0, S_v * S_v - r.p_inv * r.p_inv))); // kVAr
     const Q_plant = r.N * q_v / 1000 + r.Q_capbank;       // MVAr
     const margin = Q_plant - r.Q_total;
     return { V, S_v, q_v, Q_plant, margin, curtailed, ok: !curtailed && margin >= -1e-9 };
@@ -886,7 +923,14 @@ function update() {
   setText("outLosses", fmt(r.lossSum, 3), "MW");
   setText("outPTotal", fmt(r.P_total), "MW");
   setText("outInvP", fmt(r.p_inv, 1), "kW");
-  setText("outInvQ", fmt(r.q_inv, 1), "kVAr");
+  setText("outInvQ", fmt(r.q_inv, 1), r.qOvr ? "kVAr · datasheet" : "kVAr · derived");
+  const qNote = document.getElementById("qOvrNote");
+  if (r.qOvr && Math.hypot(r.p_inv, r.q_inv) > r.S_inv * 1.001) {
+    qNote.hidden = false;
+    qNote.innerHTML = `The operating point (<span class="mono">${fmt(r.p_inv, 1)} kW</span>, <span class="mono">${fmt(r.q_inv, 1)} kVAr</span>) exceeds the <span class="mono">${fmt(r.S_inv, 0)} kVA</span> rating — an effective apparent power of <span class="mono">${fmt(r.S_eff, 1)} kVA</span> is assumed. Confirm the datasheet allows P and Q simultaneously at this point.`;
+  } else {
+    qNote.hidden = true;
+  }
   setText("outQInv", fmt(r.Q_for_inv), "MVAr");
   setText("outNReq", String(r.N_req), "nos.");
   setText("outNInv", String(r.N), r.manualN ? "nos. · fixed" : "nos. · auto");
@@ -984,6 +1028,12 @@ bind("invKVA", "invKVA");
 bind("invPF", "invPF");
 bind("capBank", "capBank");
 
+const invQInput = document.getElementById("invQ");
+invQInput.addEventListener("input", () => {
+  state.invQOverride = invQInput.value === "" ? null : Math.max(0, num(invQInput.value));
+  update();
+});
+
 const invCountInput = document.getElementById("invCount");
 invCountInput.addEventListener("input", () => {
   state.invCountOverride = invCountInput.value === "" ? null : Math.max(0, Math.round(num(invCountInput.value)));
@@ -1055,12 +1105,132 @@ document.getElementById("btnReset").addEventListener("click", () => {
   initAll();
 });
 
+/* ---------- datasheet PDF import ---------- */
+/* Best-effort in-browser extraction: inflate FlateDecode content streams with
+   DecompressionStream, pull text from Tj/TJ operators, then scan for kVAr
+   figures. Datasheets with subset/CID fonts may not yield readable text —
+   the manual field always works as the fallback. */
+async function extractPdfText(buf) {
+  const bytes = new Uint8Array(buf);
+  const latin1 = new TextDecoder("latin1").decode(bytes);
+  const chunks = [];
+  const re = /stream\r?\n/g;
+  let m;
+  while ((m = re.exec(latin1)) !== null) {
+    const start = m.index + m[0].length;
+    const end = latin1.indexOf("endstream", start);
+    if (end < 0) continue;
+    const dictStart = latin1.lastIndexOf("<<", m.index);
+    const dict = dictStart >= 0 ? latin1.slice(dictStart, m.index) : "";
+    let data = bytes.subarray(start, end);
+    // strip trailing EOL before 'endstream'
+    while (data.length && (data[data.length - 1] === 10 || data[data.length - 1] === 13)) data = data.subarray(0, data.length - 1);
+    if (/FlateDecode/.test(dict)) {
+      let ok = false;
+      for (const fmt of ["deflate", "deflate-raw"]) {
+        try {
+          const ds = new DecompressionStream(fmt);
+          const out = await new Response(new Blob([data]).stream().pipeThrough(ds)).arrayBuffer();
+          chunks.push(new TextDecoder("latin1").decode(out));
+          ok = true;
+          break;
+        } catch (e) { /* try next format */ }
+      }
+      if (!ok) continue;
+    } else if (!/(?:DCTDecode|JPXDecode|CCITTFaxDecode|Image)/.test(dict)) {
+      chunks.push(latin1.slice(start, end));
+    }
+    re.lastIndex = end + 9;
+  }
+  const parts = [];
+  for (const c of chunks) {
+    if (!/(?:Tj|TJ|BT)/.test(c)) continue;
+    // literal strings before Tj / inside TJ arrays
+    const strRe = /\(((?:\\.|[^\\()])*)\)/g;
+    let sm;
+    while ((sm = strRe.exec(c)) !== null) {
+      parts.push(sm[1].replace(/\\([nrtbf()\\])/g, (_, ch) => ({ n: "\n", r: "\r", t: "\t", b: "", f: "" }[ch] ?? ch))
+                      .replace(/\\(\d{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8))));
+    }
+  }
+  return parts.join(" ");
+}
+
+function scanKvarCandidates(text) {
+  const found = new Map();
+  // "213 kVAr", "213.5kvar", "213 k var", and "kVAr: 213"
+  const res = [
+    /(\d{1,4}(?:[.,]\d{1,2})?)\s*k\s?var/gi,
+    /kvar\s*[:=]?\s*(\d{1,4}(?:[.,]\d{1,2})?)/gi,
+  ];
+  for (const re of res) {
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const v = parseFloat(m[1].replace(",", "."));
+      if (Number.isFinite(v) && v > 0 && v < 100000) {
+        const ctx = text.slice(Math.max(0, m.index - 60), Math.min(text.length, m.index + m[0].length + 20)).replace(/\s+/g, " ").trim();
+        if (!found.has(v)) found.set(v, ctx);
+      }
+    }
+  }
+  return [...found.entries()].map(([value, context]) => ({ value, context }));
+}
+
+function renderDatasheet() {
+  const box = document.getElementById("pdfResult");
+  const ds = state.datasheet;
+  if (!ds) { box.hidden = true; return; }
+  box.hidden = false;
+  box.className = "note" + (ds.candidates.length ? " accent" : "");
+  if (!ds.candidates.length) {
+    box.innerHTML = `<b>${escapeHtml(ds.name)}</b>: no kVAr figure could be read from this PDF
+      (scanned or subset-font datasheets often aren't machine-readable). Open the datasheet,
+      find the reactive power rating, and type it into <em>Reactive capability / inverter</em>.
+      <button type="button" id="dsClear" style="margin-left:8px">Remove</button>`;
+  } else {
+    const chips = ds.candidates.slice(0, 8).map((c, i) =>
+      `<button type="button" class="ds-apply" data-v="${c.value}" title="${escapeHtml(c.context)}"
+        style="font-family:var(--mono)">${fmt(c.value, c.value % 1 ? 1 : 0)} kVAr</button>`).join(" ");
+    box.innerHTML = `<b>${escapeHtml(ds.name)}</b> — kVAr figures found (hover for context, click to apply):<br>
+      <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-top:6px">${chips}</span>
+      <button type="button" id="dsClear" style="margin-left:8px">Remove</button>`;
+    box.querySelectorAll(".ds-apply").forEach(b => b.addEventListener("click", () => {
+      state.invQOverride = parseFloat(b.dataset.v);
+      document.getElementById("invQ").value = state.invQOverride;
+      update();
+    }));
+  }
+  const clr = document.getElementById("dsClear");
+  if (clr) clr.addEventListener("click", () => { state.datasheet = null; renderDatasheet(); save(); });
+}
+
+document.getElementById("btnPdf").addEventListener("click", () => document.getElementById("pdfFile").click());
+document.getElementById("pdfFile").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const box = document.getElementById("pdfResult");
+  box.hidden = false;
+  box.className = "note";
+  box.textContent = `Reading ${f.name}…`;
+  try {
+    const text = await extractPdfText(await f.arrayBuffer());
+    state.datasheet = { name: f.name, candidates: scanKvarCandidates(text) };
+  } catch (err) {
+    state.datasheet = { name: f.name, candidates: [] };
+  }
+  renderDatasheet();
+  save();
+  e.target.value = "";
+});
+
 function initAll() {
   ["projectName","installedDC","gridLimit","powerFactor","pfSense","xmerMargin","invKVA","invPF","capBank"]
     .forEach(id => { document.getElementById(id).value = state[id] ?? ""; });
   if (!Array.isArray(state.voltLevels) || !state.voltLevels.length) state.voltLevels = [...DEFAULTS.voltLevels];
   document.getElementById("voltLevels").value = state.voltLevels.join(", ");
   document.getElementById("invCount").value = state.invCountOverride ?? "";
+  document.getElementById("invQ").value = state.invQOverride ?? "";
+  renderDatasheet();
   renderXmerRows();
   renderLossRows();
   update();

@@ -44,9 +44,17 @@ apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
   0.918 falls inside this band).
 - **Dynamic rows** — add or remove transformer groups and loss sources instead
   of a fixed layout with empty blocks.
-- **Controllable inverter count** — leave the count blank to auto-size from the
-  reactive demand (the worksheet's behaviour), or fix it to the number the
-  plant actually has. All downstream results (delivered power, reactive
+- **Datasheet reactive capability** — leave the *Reactive capability /
+  inverter* field blank to derive it from apparent power and power factor
+  (√(S² − P²), the worksheet's formula), or enter the manufacturer's kVAr
+  figure directly. A **PDF import** reads an inverter datasheet in the browser
+  (FlateDecode text extraction, no external services), finds kVAr figures, and
+  lets you apply one with a click — with a graceful fallback to manual entry
+  for scanned or non-extractable PDFs. If the stated Q exceeds √(S² − P²), the
+  app warns and assumes an effective apparent limit for the voltage sweep.
+- **Controllable inverter count** — leave the count blank to auto-size (the
+  count that meets both the reactive demand and the delivery requirement at
+  the chosen PF), or fix it to the number the plant actually has. All downstream results (delivered power, reactive
   coverage, the voltage sweep) then use the fixed count, shortfalls in either
   active or reactive terms are flagged, and Goal Seek solves the feasible
   power-factor band at that count (or reports the minimum viable count when
