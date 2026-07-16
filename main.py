@@ -11,6 +11,9 @@ them in SQLite, finds the four best-fitting ideal functions, maps the test
 points onto them and renders the visualisations.
 """
 
+from __future__ import annotations
+
+import argparse
 import sys
 
 import pandas as pd
@@ -19,13 +22,31 @@ from ideal_function import DataValidationError, TestPointMapper
 from SQLiteDB import SQLiteDB
 from visualizition import Visualizer
 
-TRAIN_CSV = "train.csv"
-IDEAL_CSV = "ideal.csv"
-TEST_CSV = "test.csv"
-MAP_TABLE_CSV = "map_table.csv"
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    """Parse the command-line options (every option has a sensible default)."""
+    parser = argparse.ArgumentParser(
+        description=(
+            "Find the best-fitting ideal functions for the training data, "
+            "map the test points onto them, store everything in SQLite and "
+            "render Bokeh visualisations."
+        )
+    )
+    parser.add_argument("--train", default="train.csv", help="training data CSV")
+    parser.add_argument("--ideal", default="ideal.csv", help="ideal functions CSV")
+    parser.add_argument("--test", default="test.csv", help="test points CSV")
+    parser.add_argument(
+        "--map-table", default="map_table.csv", help="output CSV for the mapping results"
+    )
+    parser.add_argument("--db", default="assignment.db", help="SQLite database file")
+    parser.add_argument("--plots-dir", default="plots", help="directory for HTML plots")
+    parser.add_argument(
+        "--show", action="store_true", help="open the plots in a web browser"
+    )
+    return parser.parse_args(argv)
 
 
-def load_csv(path):
+def load_csv(path: str) -> pd.DataFrame:
     """Read a CSV file, exiting with a clear message when it is unusable."""
     try:
         return pd.read_csv(path)
@@ -35,14 +56,16 @@ def load_csv(path):
         sys.exit(f"Error: input file '{path}' could not be parsed: {exc}")
 
 
-def main():
+def main(argv: list[str] | None = None) -> None:
     """Run the complete assignment pipeline."""
-    train = load_csv(TRAIN_CSV)
-    ideal = load_csv(IDEAL_CSV)
-    test = load_csv(TEST_CSV)
+    args = parse_args(argv)
+
+    train = load_csv(args.train)
+    ideal = load_csv(args.ideal)
+    test = load_csv(args.test)
 
     # Persist the raw datasets in the SQLite database.
-    database = SQLiteDB()
+    database = SQLiteDB(args.db)
     database.load_train(train)
     database.load_ideal(ideal)
 
@@ -76,11 +99,11 @@ def main():
     print(mapping)
 
     # Persist the mapping results as CSV and in the database.
-    mapping.to_csv(MAP_TABLE_CSV, index=False)
+    mapping.to_csv(args.map_table, index=False)
     database.load_mapping(mapping)
 
-    # Render all visualisations (saved as HTML files in ./plots).
-    visualizer = Visualizer()
+    # Render all visualisations (saved as HTML files in the plots directory).
+    visualizer = Visualizer(output_dir=args.plots_dir, show_in_browser=args.show)
     paths = [
         visualizer.visualize_training_data(train),
         visualizer.visualize_ideal_data(ideal_table, best_fits),

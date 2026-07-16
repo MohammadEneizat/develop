@@ -10,6 +10,8 @@ The ideal_function module finds the best-fitting ideal functions for the
 training data (least-squares criterion) and maps test points onto them.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 import numpy as np
@@ -47,7 +49,7 @@ class IdealFunctionFinder:
     """Finds, for every training function, the ideal function that minimises
     the sum of squared errors (least-squares criterion)."""
 
-    def __init__(self, train_df, ideal_df):
+    def __init__(self, train_df: pd.DataFrame, ideal_df: pd.DataFrame) -> None:
         """Validate and store the training and ideal datasets.
 
         Both dataframes must share the same x values in their first column;
@@ -56,10 +58,10 @@ class IdealFunctionFinder:
         self._validate(train_df, ideal_df)
         self.train_df = train_df
         self.ideal_df = ideal_df
-        self.best_fits = []
+        self.best_fits: list[BestFit] = []
 
     @staticmethod
-    def _validate(train_df, ideal_df):
+    def _validate(train_df: pd.DataFrame, ideal_df: pd.DataFrame) -> None:
         """Check that both datasets are usable and aligned on x."""
         if train_df.shape[1] < 2:
             raise DataValidationError(
@@ -81,7 +83,7 @@ class IdealFunctionFinder:
                 "training and ideal data must share the same x values"
             )
 
-    def find_best_fits(self):
+    def find_best_fits(self) -> list[BestFit]:
         """Return one BestFit per training function.
 
         For each training column the sum of squared errors against every
@@ -120,7 +122,7 @@ class TestPointMapper(IdealFunctionFinder):
         "No. of ideal func",
     ]
 
-    def map_test_points(self, test_df):
+    def map_test_points(self, test_df: pd.DataFrame) -> pd.DataFrame:
         """Map every x-y test pair onto the chosen ideal functions.
 
         A pair maps to an ideal function when the absolute deviation between

@@ -10,6 +10,8 @@ The SQLiteDB module persists the assignment datasets in a single SQLite
 database with one table per dataset (train, ideal, mapping).
 """
 
+from __future__ import annotations
+
 import pandas as pd
 from sqlalchemy import create_engine
 
@@ -21,11 +23,11 @@ class SQLiteDB:
     IDEAL_TABLE = "ideal"
     MAPPING_TABLE = "mapping"
 
-    def __init__(self, db_path="assignment.db"):
+    def __init__(self, db_path: str = "assignment.db") -> None:
         """Create (or open) the SQLite database at db_path."""
         self.engine = create_engine(f"sqlite:///{db_path}")
 
-    def load_train(self, train_df):
+    def load_train(self, train_df: pd.DataFrame) -> None:
         """Store the training data in the 'train' table.
 
         Columns are renamed to the assignment convention
@@ -39,7 +41,7 @@ class SQLiteDB:
             self.TRAIN_TABLE, self.engine, if_exists="replace", index=False
         )
 
-    def load_ideal(self, ideal_df):
+    def load_ideal(self, ideal_df: pd.DataFrame) -> None:
         """Store the ideal functions in the 'ideal' table.
 
         Columns are renamed to the assignment convention
@@ -53,12 +55,12 @@ class SQLiteDB:
             self.IDEAL_TABLE, self.engine, if_exists="replace", index=False
         )
 
-    def load_mapping(self, mapping_df):
+    def load_mapping(self, mapping_df: pd.DataFrame) -> None:
         """Store the test-point mapping results in the 'mapping' table."""
         mapping_df.to_sql(
             self.MAPPING_TABLE, self.engine, if_exists="replace", index=False
         )
 
-    def read_table(self, table_name):
+    def read_table(self, table_name: str) -> pd.DataFrame:
         """Return the given table as a dataframe (used for verification)."""
         return pd.read_sql_table(table_name, self.engine)
