@@ -19,15 +19,16 @@ injection limit and the reactive power demand.
 4. **Inverter capability** — per-inverter reactive capability `√(S² − P²)` at
    the chosen inverter power factor, required inverter count
    `⌈Q_total / q_inv⌉`, and the net power actually delivered to the grid.
-5. **Reactive capability vs grid voltage** *(new, not in the worksheet)* — the
+5. **Inverter P–Q capability** *(new, not in the worksheet)* — the datasheet's
+   Q(t)-mode capability table, editable in place, rendered as a P–Q diagram.
+6. **Reactive capability vs grid voltage** *(new, not in the worksheet)* — the
    plant's reactive capability evaluated across a grid-voltage band
-   (default 0.80–1.15 p.u., editable). Below 1.00 p.u. the inverter is
-   current-limited, so apparent power scales with voltage
-   (`S(V) = V × S_rated`); above 1.00 p.u. it holds rated apparent power.
-   Active power is dispatched first (P-priority) and the remainder is available
-   as reactive power: `q(V) = √(S(V)² − p²)`. Each level gets a pass/fail
-   verdict against the reactive demand, with active-power-curtailment flagging
-   when `S(V) < p`, plus a capability curve chart with hover details.
+   (default 0.80–1.15 p.u., editable). With the capability table in use, each
+   level reads the table (interpolated, clamped at the edges); otherwise a
+   current-limit model applies (`S(V) = V × S_rated` below nominal, rated
+   above, P-priority: `q(V) = √(S(V)² − p²)`). Each level gets a pass/fail
+   verdict against the reactive demand, with active-power-curtailment
+   flagging, plus a capability curve chart with hover details.
 
 The engine was verified against the workbook's cached values: all intermediate
 and final results (MVA rating, MVAr demand, transformer demand, losses,
@@ -44,15 +45,17 @@ apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
   0.918 falls inside this band).
 - **Dynamic rows** — add or remove transformer groups and loss sources instead
   of a fixed layout with empty blocks.
-- **Datasheet reactive capability** — leave the *Reactive capability /
-  inverter* field blank to derive it from apparent power and power factor
-  (√(S² − P²), the worksheet's formula), or enter the manufacturer's kVAr
-  figure directly. A **datasheet import (PDF or Excel)** reads the file in the
-  browser — PDF via FlateDecode text extraction, .xlsx via a minimal ZIP +
-  SpreadsheetML reader, no external services — finds kVA (apparent power) and
-  kVAr (reactive capability) figures by unit and by row label, and lets you
-  apply each with a click, with a graceful fallback to manual entry for
-  scanned or non-extractable files. If the stated Q exceeds √(S² − P²), the
+- **Inverter P–Q capability table & diagram** — enter the manufacturer's
+  Q(t)-mode table directly (max reactive power as % of rated kVA, per grid
+  voltage row, per active-loading column; empty cell = N/A). The app draws the
+  inverter P–Q capability diagram from it — symmetric capacitive/inductive
+  curves per voltage (identical rows grouped like the datasheet legend), with
+  the design operating point plotted on it. When enabled, the table also
+  drives the sizing (capability at the 1.00 Vn row and dispatched loading),
+  the Goal Seek (numeric scan, since capability varies with PF), and the
+  voltage sweep (interpolated between rows and loadings; N/A regions are
+  flagged as curtailed). When disabled, capability falls back to the manual
+  kVAr field or the √(S² − P²) derivation. If the stated Q exceeds √(S² − P²), the
   app warns and assumes an effective apparent limit for the voltage sweep.
 - **Controllable inverter count** — leave the count blank to auto-size (the
   count that meets both the reactive demand and the delivery requirement at

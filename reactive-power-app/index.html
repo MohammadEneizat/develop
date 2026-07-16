@@ -19,6 +19,10 @@
     --accent-soft: #e3edf9;
     --series-p: #2a78d6;
     --series-q: #008300;
+    --cat3: #e87ba4;
+    --cat4: #eda100;
+    --cat5: #1baf7a;
+    --cat6: #eb6834;
     --good: #006300;
     --good-bg: #e6f4e6;
     --crit: #d03b3b;
@@ -44,6 +48,10 @@
       --accent-soft: #16233a;
       --series-p: #3987e5;
       --series-q: #008300;
+      --cat3: #d55181;
+      --cat4: #c98500;
+      --cat5: #199e70;
+      --cat6: #d95926;
       --good: #0ca30c;
       --good-bg: #12240f;
       --crit: #e05252;
@@ -67,6 +75,10 @@
     --accent-soft: #16233a;
     --series-p: #3987e5;
     --series-q: #008300;
+    --cat3: #d55181;
+    --cat4: #c98500;
+    --cat5: #199e70;
+    --cat6: #d95926;
     --good: #0ca30c;
     --good-bg: #12240f;
     --crit: #e05252;
@@ -303,6 +315,25 @@
   .vstatus.bad { background: var(--crit-bg); color: var(--crit); }
   .vstatus.warn { background: var(--warn-bg); color: var(--warn); }
 
+  /* P-Q capability grid */
+  table.pqtable { border-collapse: collapse; }
+  table.pqtable th {
+    font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; padding: 0 3px 6px;
+    text-align: center; white-space: nowrap;
+  }
+  table.pqtable th:first-child { text-align: left; }
+  table.pqtable td { padding: 2px 3px; }
+  table.pqtable input {
+    width: 52px; padding: 5px 5px; text-align: right;
+    border: 1px solid var(--hairline); border-radius: 5px;
+    background: var(--surface); color: var(--ink);
+    font-family: var(--mono); font-size: 11.5px; font-variant-numeric: tabular-nums;
+  }
+  table.pqtable input:focus { outline: none; border-color: var(--accent); }
+  table.pqtable input::placeholder { color: var(--muted); opacity: .6; font-style: italic; }
+  table.pqtable td.pqv input { width: 58px; font-weight: 600; }
+
   .kv { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 12.5px; border-bottom: 1px dashed var(--hairline); }
   .kv:last-child { border-bottom: none; }
   .kv .k { color: var(--ink-2); }
@@ -438,11 +469,6 @@
       </div>
       <div class="note" id="goalSeekNote" hidden></div>
       <div class="note" id="qOvrNote" hidden></div>
-      <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center">
-        <button id="btnPdf" type="button">📄 Read from datasheet (PDF / Excel)</button>
-        <input id="pdfFile" type="file" accept=".pdf,.xlsx,.xlsm,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-      </div>
-      <div class="note" id="pdfResult" hidden></div>
       <div class="derived">
         <div class="chip"><span class="k">Active power / inverter</span><span class="v" id="outInvP">—<small>kW</small></span></div>
         <div class="chip"><span class="k">Reactive capability / inverter</span><span class="v" id="outInvQ">—<small>kVAr</small></span></div>
@@ -450,13 +476,37 @@
         <div class="chip"><span class="k">Minimum required (auto)</span><span class="v" id="outNReq">—<small>nos.</small></span></div>
         <div class="chip"><span class="k">Inverters in design</span><span class="v" id="outNInv">—<small>nos.</small></span></div>
       </div>
-      <div class="note">Leave <em>Reactive capability</em> blank to derive it from the apparent power and power factor (√(S² − P²)), or enter the datasheet value directly if the manufacturer states it. Leave <em>Number of inverters</em> blank to auto-size from the reactive demand, or enter the count your plant actually has — every downstream result (delivered power, reactive coverage, the voltage sweep) then uses your numbers, and shortfalls are flagged. A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. (The original worksheet added it to the demand — corrected here.)</div>
+      <div class="note">When the Step 5 capability table is in use, the reactive capability comes from its 1.00 Vn row at the dispatched loading. Otherwise, leave <em>Reactive capability</em> blank to derive it from the apparent power and power factor (√(S² − P²)), or enter the manufacturer's value directly. Leave <em>Number of inverters</em> blank to auto-size, or enter the count your plant actually has — every downstream result (delivered power, reactive coverage, the voltage sweep) then uses your numbers, and shortfalls are flagged. A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. (The original worksheet added it to the demand — corrected here.)</div>
     </section>
 
-    <!-- Step 5 -->
+    <!-- Step 5: inverter P-Q capability table + diagram -->
     <section class="card">
-      <h2><span class="stepno">STEP 5</span> Reactive capability vs grid voltage</h2>
-      <p class="sub">Grid codes require reactive support across a voltage band, not just at nominal. Below 1.00 p.u. the inverter is current-limited, so its apparent power shrinks with voltage (S = V × S<sub>rated</sub>); above 1.00 p.u. it holds rated apparent power. With active power dispatched first (P-priority), whatever capability remains is available as reactive power.</p>
+      <h2><span class="stepno">STEP 5</span> Inverter P–Q capability (datasheet table)</h2>
+      <p class="sub">Fill in the manufacturer's Q(t)-mode table: for each grid voltage, the maximum reactive power (% of rated kVA) at each active-power loading (p.u. of rated kVA). Leave a cell empty for N/A — operation not permitted there. Capacitive and inductive limits are assumed symmetric, as in the datasheet. The diagram below is drawn from these values.</p>
+      <div class="rowscroll">
+        <table class="pqtable" id="pqTable">
+          <thead><tr id="pqHead"></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:10px">
+        <button id="addPqRow" type="button">+ Add voltage row</button>
+        <label style="display:inline-flex; align-items:center; gap:7px; font-size:12.5px; cursor:pointer">
+          <input type="checkbox" id="pqUse" style="accent-color:var(--accent); width:15px; height:15px">
+          Use this table for sizing and the voltage sweep
+        </label>
+      </div>
+      <div class="vchart-wrap">
+        <svg id="pqchart" viewBox="0 0 760 380" role="img" aria-label="Inverter P-Q capability diagram per grid voltage, with the plant operating point"></svg>
+        <div class="vtip" id="pqtip"></div>
+      </div>
+      <div class="note">The marker shows the design operating point: active power per inverter against the reactive power each inverter must supply (<span class="mono" id="pqOpNote">—</span>). It must sit inside the capability curve of every voltage the plant has to support.</div>
+    </section>
+
+    <!-- Step 6 -->
+    <section class="card">
+      <h2><span class="stepno">STEP 6</span> Reactive capability vs grid voltage</h2>
+      <p class="sub" id="sweepSub">Grid codes require reactive support across a voltage band, not just at nominal. With the Step 5 table in use, each voltage level reads the inverter's capability straight from the table (interpolated between rows and loadings, clamped at the table's edges). Otherwise a current-limit model applies: apparent power shrinks with voltage below 1.00 p.u. (S = V × S<sub>rated</sub>) and holds rated above, with active power dispatched first.</p>
       <div class="fields">
         <div class="field" style="grid-column: 1 / -1">
           <label for="voltLevels">Voltage levels to evaluate</label>
@@ -547,8 +597,21 @@ const DEFAULTS = {
   capBank: 0,
   invCountOverride: null,
   invQOverride: null,
-  datasheet: null,
   voltLevels: [0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15],
+  // Q(t)-mode capability: % of rated kVA vs active loading (p.u. of rated kVA),
+  // one row per grid voltage; null = N/A (operation not permitted)
+  pq: {
+    use: true,
+    pLevels: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+    rows: [
+      { v: 1.10, q: [60, 60, 60, 60, 60, 60, 60, 60, 60, 43.6, 0] },
+      { v: 1.05, q: [60, 60, 60, 60, 60, 60, 60, 60, 60, 43.6, 0] },
+      { v: 1.00, q: [60, 60, 60, 60, 60, 60, 60, 60, 60, 43.6, 0] },
+      { v: 0.95, q: [60, 60, 60, 60, 60, 60, 60, 60, 51.2, 30.4, null] },
+      { v: 0.90, q: [60, 60, 60, 60, 60, 60, 60, 56.6, 41.2, 0, null] },
+      { v: 0.85, q: [60, 60, 60, 60, 60, 60, 60, 48.2, 28.7, null, null] },
+    ],
+  },
   xmers: [
     { name: "TS Block 1", qty: 3, rating: 10164, z: 9.5 },
     { name: "TS Block 2", qty: 4, rating: 7260, z: 9.5 },
@@ -572,6 +635,8 @@ function load() {
       const s = JSON.parse(raw);
       if (s && Array.isArray(s.xmers) && Array.isArray(s.losses)) {
         if (!Array.isArray(s.voltLevels) || !s.voltLevels.length) s.voltLevels = [...DEFAULTS.voltLevels];
+        if (!s.pq || !Array.isArray(s.pq.rows) || !Array.isArray(s.pq.pLevels)) s.pq = structuredClone(DEFAULTS.pq);
+        delete s.datasheet;
         return s;
       }
     }
@@ -580,6 +645,51 @@ function load() {
 }
 function save() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
+/* ---------- P-Q capability table ---------- */
+/* Capability of one voltage row at active loading pPu (p.u. of rated kVA);
+   linear interpolation between columns, N/A (null) cells not permitted. */
+function rowCap(row, pLevels, pPu) {
+  const q = row.q;
+  let maxI = -1;
+  for (let i = 0; i < pLevels.length; i++) if (q[i] != null && q[i] !== "") maxI = i;
+  if (maxI < 0) return { pct: 0, allowed: false };
+  if (pPu > pLevels[maxI] + 1e-9) return { pct: 0, allowed: false };
+  if (pPu <= pLevels[0]) return { pct: num(q[0]), allowed: q[0] != null && q[0] !== "" };
+  for (let i = 1; i <= maxI; i++) {
+    if (pPu <= pLevels[i] + 1e-9) {
+      const a = q[i - 1], b = q[i];
+      if (a == null || a === "" || b == null || b === "") return { pct: 0, allowed: false };
+      const t = (pPu - pLevels[i - 1]) / (pLevels[i] - pLevels[i - 1]);
+      return { pct: num(a) + (num(b) - num(a)) * t, allowed: true };
+    }
+  }
+  return { pct: 0, allowed: false };
+}
+/* Interpolates across voltage rows too; clamps outside the table's band. */
+function qCapAt(pq, vPu, pPu) {
+  const rows = (pq.rows || []).filter(r => Number.isFinite(num(r.v)) && r.q.some(x => x != null && x !== ""))
+    .slice().sort((a, b) => num(a.v) - num(b.v));
+  if (!rows.length) return { pct: 0, allowed: false };
+  if (vPu <= num(rows[0].v)) return rowCap(rows[0], pq.pLevels, pPu);
+  if (vPu >= num(rows[rows.length - 1].v)) return rowCap(rows[rows.length - 1], pq.pLevels, pPu);
+  for (let i = 1; i < rows.length; i++) {
+    if (vPu <= num(rows[i].v) + 1e-9) {
+      const t = (vPu - num(rows[i - 1].v)) / (num(rows[i].v) - num(rows[i - 1].v));
+      // exactly on a row: that row alone governs — a neighbour's N/A must not zero it
+      if (t >= 1 - 1e-6) return rowCap(rows[i], pq.pLevels, pPu);
+      if (t <= 1e-6) return rowCap(rows[i - 1], pq.pLevels, pPu);
+      const A = rowCap(rows[i - 1], pq.pLevels, pPu), B = rowCap(rows[i], pq.pLevels, pPu);
+      if (!A.allowed || !B.allowed) return { pct: 0, allowed: false };
+      return { pct: A.pct + (B.pct - A.pct) * t, allowed: true };
+    }
+  }
+  return { pct: 0, allowed: false };
+}
+function pqIsActive(s) {
+  return !!(s.pq && s.pq.use && Array.isArray(s.pq.rows) &&
+            s.pq.rows.some(r => r.q.some(x => x != null && x !== "")));
 }
 
 /* ---------- calculation model ---------- */
@@ -609,10 +719,18 @@ function compute(s) {
   const q_derived = Math.sqrt(Math.max(0, S_inv * S_inv - p_inv * p_inv)); // kVAr
   const qo = s.invQOverride;
   const qOvr = qo != null && qo !== "" && num(qo) > 0;
-  const q_inv = qOvr ? num(qo) : q_derived;                        // kVAr
-  // a datasheet Q beyond sqrt(S^2-P^2) implies the machine supports that
-  // operating point; the effective apparent limit scales the voltage sweep
-  const S_eff = qOvr ? Math.max(S_inv, Math.hypot(p_inv, q_inv)) : S_inv;
+  const pqActive = pqIsActive(s);
+  // capability precedence: P-Q table (at nominal voltage) > manual value > derived
+  let q_inv;
+  if (pqActive) {
+    const cap = qCapAt(s.pq, 1.0, pf_inv);
+    q_inv = cap.allowed ? cap.pct / 100 * S_inv : 0;               // kVAr
+  } else {
+    q_inv = qOvr ? num(qo) : q_derived;                            // kVAr
+  }
+  // a stated Q beyond sqrt(S^2-P^2) implies the machine supports that
+  // operating point; the effective apparent limit scales the fallback sweep
+  const S_eff = !pqActive && qOvr ? Math.max(S_inv, Math.hypot(p_inv, q_inv)) : S_inv;
 
   const Q_capbank = Math.max(0, num(s.capBank));                   // MVAr
   const Q_for_inv = Math.max(0, Q_total - Q_capbank);              // MVAr
@@ -633,7 +751,7 @@ function compute(s) {
 
   return { P, pf, S_plant, Q_grid, xmers, xmerSum, Q_xmer, Q_total,
            losses, lossSum, P_total, S_actual,
-           S_inv, pf_inv, p_inv, q_derived, qOvr, q_inv, S_eff, Q_capbank, Q_for_inv,
+           S_inv, pf_inv, p_inv, q_derived, qOvr, pqActive, q_inv, S_eff, Q_capbank, Q_for_inv,
            N_req, manualN, N, P_delivered, Q_compensated, meetsP, meetsQ, meets };
 }
 
@@ -648,9 +766,31 @@ function goalSeek(s) {
   const Q_req = r.Q_for_inv * 1000;                // kVAr
   const S_inv = r.S_inv;
   if (S_inv <= 0 || (P_req <= 0 && Q_req <= 0)) return null;
+  if (r.pqActive) {
+    // capability varies with PF through the table — scan numerically
+    const cand = [];
+    for (let k = 5000; k <= 9999; k += 5) {
+      const pf = k / 10000;
+      const cap = qCapAt(s.pq, 1.0, pf);
+      if (!cap.allowed) continue;
+      const q = cap.pct / 100 * S_inv;
+      const Np = Math.ceil(P_req / (S_inv * pf));
+      const Nq = Q_req > 0 ? (q > 0 ? Math.ceil(Q_req / q) : Infinity) : 0;
+      const n = Math.max(1, Np, Nq);
+      if (Number.isFinite(n)) cand.push({ pf, n });
+    }
+    if (!cand.length) return null;
+    const Nmin = cand.reduce((a, c) => Math.min(a, c.n), Infinity);
+    const N = r.manualN ? r.N : Nmin;
+    const feas = cand.filter(c => c.n <= N);
+    if (!feas.length) return { infeasible: true, N, Nmin };
+    const pfMin = feas[0].pf, pfMax = feas[feas.length - 1].pf;
+    const pf = Math.round(((pfMin + pfMax) / 2) * 1e4) / 1e4;
+    return { N, Nmin, fixed: r.manualN, qFixed: true, pfMin, pfMax, pf: clamp(pf, pfMin, pfMax) };
+  }
   let Nmin;
   if (r.qOvr) {
-    // fixed datasheet Q per inverter: reactive and active constraints separate
+    // fixed manual Q per inverter: reactive and active constraints separate
     if (r.q_inv <= 0) return null;
     Nmin = Math.max(1, Math.ceil(Q_req / r.q_inv), Math.ceil(P_req / (S_inv * 0.9999)));
   } else {
@@ -680,10 +820,19 @@ function goalSeek(s) {
 function voltageSweep(s, r) {
   const levels = (Array.isArray(s.voltLevels) ? s.voltLevels : [])
     .map(num).filter(v => v > 0).sort((a, b) => a - b);
+  const pPu = r.S_inv > 0 ? r.p_inv / r.S_inv : 0;
   return levels.map(V => {
-    const S_v = r.S_eff * Math.min(V, 1);                 // kVA available
-    const curtailed = S_v < r.p_inv - 1e-9;               // can't even carry P
-    const q_v = curtailed ? 0 : Math.min(r.q_inv, Math.sqrt(Math.max(0, S_v * S_v - r.p_inv * r.p_inv))); // kVAr
+    let S_v, curtailed, q_v;
+    if (r.pqActive) {
+      const cap = qCapAt(s.pq, V, pPu);
+      curtailed = !cap.allowed;
+      q_v = curtailed ? 0 : cap.pct / 100 * r.S_inv;      // kVAr from the table
+      S_v = curtailed ? 0 : Math.hypot(r.p_inv, q_v);     // implied apparent power
+    } else {
+      S_v = r.S_eff * Math.min(V, 1);                     // kVA available
+      curtailed = S_v < r.p_inv - 1e-9;                   // can't even carry P
+      q_v = curtailed ? 0 : Math.min(r.q_inv, Math.sqrt(Math.max(0, S_v * S_v - r.p_inv * r.p_inv))); // kVAr
+    }
     const Q_plant = r.N * q_v / 1000 + r.Q_capbank;       // MVAr
     const margin = Q_plant - r.Q_total;
     return { V, S_v, q_v, Q_plant, margin, curtailed, ok: !curtailed && margin >= -1e-9 };
@@ -807,6 +956,145 @@ function drawTriangle(r) {
   svg.append(el("text", { x: x0 + px / 2 - 8, y: y1 + (y0 - y1) / 2 - 10, fill: cInk, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `S ${fmt(r.S_actual)} MVA`));
 }
 
+/* ---------- P-Q capability grid & diagram ---------- */
+function renderPQTable() {
+  const pq = state.pq;
+  const head = document.getElementById("pqHead");
+  head.innerHTML = `<th>Grid voltage (Vn)</th>` +
+    pq.pLevels.map(p => `<th>${p.toFixed(1)} pu</th>`).join("") + `<th></th>`;
+  const tb = document.querySelector("#pqTable tbody");
+  tb.innerHTML = "";
+  pq.rows.forEach((row, i) => {
+    const tr = document.createElement("tr");
+    const tdv = document.createElement("td");
+    tdv.className = "pqv";
+    const vin = document.createElement("input");
+    vin.type = "number"; vin.step = "0.01"; vin.value = row.v ?? "";
+    vin.setAttribute("aria-label", "Grid voltage in per-unit");
+    vin.addEventListener("input", () => { row.v = vin.value === "" ? "" : num(vin.value); update(); });
+    tdv.append(vin);
+    tr.append(tdv);
+    pq.pLevels.forEach((p, j) => {
+      const td = document.createElement("td");
+      const inp = document.createElement("input");
+      inp.type = "number"; inp.step = "any"; inp.placeholder = "N/A";
+      inp.value = row.q[j] ?? "";
+      inp.setAttribute("aria-label", `Q limit in percent at ${p.toFixed(1)} p.u. loading, ${row.v} Vn`);
+      inp.addEventListener("input", () => { row.q[j] = inp.value === "" ? null : num(inp.value); update(); });
+      td.append(inp);
+      tr.append(td);
+    });
+    tr.append(removeCell(() => { pq.rows.splice(i, 1); renderPQTable(); update(); }, "Remove voltage row"));
+    tb.append(tr);
+  });
+}
+
+function drawPQ(r) {
+  const svg = document.getElementById("pqchart");
+  const tip = document.getElementById("pqtip");
+  const css = getComputedStyle(document.documentElement);
+  const colors = ["--series-p", "--series-q", "--cat3", "--cat4", "--cat5", "--cat6"]
+    .map(v => css.getPropertyValue(v).trim());
+  const cInk = css.getPropertyValue("--ink").trim();
+  const cInk2 = css.getPropertyValue("--ink-2").trim();
+  const cMuted = css.getPropertyValue("--muted").trim();
+  const cGrid = css.getPropertyValue("--grid").trim();
+  const cSurface = css.getPropertyValue("--surface").trim();
+  const mono = "ui-monospace, Menlo, monospace";
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  svg.innerHTML = "";
+  const pq = state.pq, S = r.S_inv;
+  const rows = (pq.rows || []).filter(rw => rw.v !== "" && Number.isFinite(num(rw.v)) && rw.q.some(x => x != null && x !== ""));
+  if (!rows.length || S <= 0) return;
+
+  // group voltages with identical capability rows (drawn as one curve, like the datasheet)
+  const groups = [];
+  for (const rw of [...rows].sort((a, b) => num(b.v) - num(a.v))) {
+    const key = JSON.stringify(rw.q);
+    const g = groups.find(x => x.key === key);
+    if (g) g.vs.push(num(rw.v));
+    else groups.push({ key, q: rw.q, vs: [num(rw.v)] });
+  }
+
+  const W = 760, H = 380, mL = 60, mR = 168, mT = 20, mB = 48;
+  const qMaxPct = Math.max(...rows.flatMap(rw => rw.q.filter(x => x != null && x !== "").map(num)), 1);
+  const xMax = qMaxPct / 100 * S * 1.18;
+  const yMax = S * 1.06;
+  const x = q => mL + (q + xMax) / (2 * xMax) * (W - mL - mR);
+  const y = p => H - mB - p / yMax * (H - mT - mB);
+
+  // grid + axes
+  for (let i = 0; i <= 4; i++) {
+    const pv = yMax / 4 * i, yy = y(pv);
+    svg.append(el("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
+    svg.append(el("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(pv, 0)));
+  }
+  const xstep = xMax > 400 ? 200 : xMax > 200 ? 100 : xMax > 80 ? 50 : 20;
+  for (let qv = 0; qv <= xMax; qv += xstep) {
+    for (const sgn of qv === 0 ? [1] : [1, -1]) {
+      const xx = x(sgn * qv);
+      svg.append(el("line", { x1: xx, y1: H - mB, x2: xx, y2: H - mB + 4, stroke: cMuted, "stroke-width": 1 }));
+      svg.append(el("text", { x: xx, y: H - mB + 16, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(sgn * qv, 0)));
+    }
+  }
+  svg.append(el("line", { x1: mL, y1: H - mB, x2: W - mR, y2: H - mB, stroke: cMuted, "stroke-width": 1.25 }));
+  svg.append(el("line", { x1: x(0), y1: mT - 4, x2: x(0), y2: H - mB, stroke: cGrid, "stroke-width": 1.25 }));
+  svg.append(el("text", { x: x(0) + 6, y: mT + 4, fill: cMuted, "font-size": 10.5 }, "P (kW)"));
+  svg.append(el("text", { x: W - mR, y: H - 8, "text-anchor": "end", fill: cMuted, "font-size": 10.5 }, "Q (kVAr)"));
+  svg.append(el("text", { x: mL, y: H - 8, fill: cMuted, "font-size": 10 }, "◀ Inductive"));
+  svg.append(el("text", { x: W - mR, y: H - 22, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "Capacitive ▶"));
+
+  // capability curves (symmetric ± Q), sampled densely over loading
+  groups.forEach((g, gi) => {
+    const color = colors[gi % colors.length];
+    const row = { v: g.vs[0], q: g.q };
+    const pts = [];
+    for (let p = 0; p <= 1.0001; p += 0.005) {
+      const cap = rowCap(row, pq.pLevels, Math.min(p, 1));
+      if (cap.allowed) pts.push({ p: Math.min(p, 1) * S, q: cap.pct / 100 * S });
+    }
+    if (!pts.length) return;
+    const left = pts.map((d, i) => `${i ? "L" : "M"} ${x(-d.q).toFixed(1)} ${y(d.p).toFixed(1)}`).join(" ");
+    const right = [...pts].reverse().map(d => `L ${x(d.q).toFixed(1)} ${y(d.p).toFixed(1)}`).join(" ");
+    svg.append(el("path", { d: `${left} ${right}`, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    // legend
+    const ly = mT + 14 + gi * 20;
+    svg.append(el("line", { x1: W - mR + 14, y1: ly - 4, x2: W - mR + 34, y2: ly - 4, stroke: color, "stroke-width": 2.5, "stroke-linecap": "round" }));
+    svg.append(el("text", { x: W - mR + 40, y: ly, fill: cInk2, "font-size": 10.5, "font-family": mono },
+      g.vs.map(v => v.toFixed(2)).join("/") + " Vn"));
+  });
+
+  // design operating point: Q each inverter must supply at its dispatched P
+  const qOp = r.N > 0 ? r.Q_for_inv * 1000 / r.N : 0;
+  if (r.N > 0 && r.p_inv > 0) {
+    svg.append(el("line", { x1: x(qOp), y1: y(r.p_inv), x2: x(qOp), y2: H - mB, stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
+    svg.append(el("line", { x1: x(0), y1: y(r.p_inv), x2: x(qOp), y2: y(r.p_inv), stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
+    svg.append(el("circle", { cx: x(qOp), cy: y(r.p_inv), r: 5, fill: cInk, stroke: cSurface, "stroke-width": 2 }));
+    svg.append(el("text", { x: x(qOp) + 9, y: y(r.p_inv) - 8, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "operating point"));
+  }
+
+  // coordinate readout on hover
+  svg.onmousemove = ev => {
+    const rect = svg.getBoundingClientRect();
+    const sx = (ev.clientX - rect.left) / rect.width * W;
+    const sy = (ev.clientY - rect.top) / rect.height * H;
+    if (sx < mL || sx > W - mR || sy < mT || sy > H - mB) { tip.style.display = "none"; return; }
+    const qv = (sx - mL) / (W - mL - mR) * 2 * xMax - xMax;
+    const pv = (H - mB - sy) / (H - mT - mB) * yMax;
+    tip.style.display = "block";
+    tip.innerHTML = `Q ${fmt(qv, 0)} kVAr<br>P ${fmt(pv, 0)} kW`;
+    const wrap = svg.parentElement.getBoundingClientRect();
+    tip.style.left = Math.min(ev.clientX - wrap.left + 14, wrap.width - tip.offsetWidth - 4) + "px";
+    tip.style.top = (ev.clientY - wrap.top - tip.offsetHeight - 10) + "px";
+  };
+  svg.onmouseleave = () => { tip.style.display = "none"; };
+}
+
 /* ---------- voltage capability chart & table ---------- */
 function drawVChart(rows, r) {
   const svg = document.getElementById("vchart");
@@ -923,11 +1211,14 @@ function update() {
   setText("outLosses", fmt(r.lossSum, 3), "MW");
   setText("outPTotal", fmt(r.P_total), "MW");
   setText("outInvP", fmt(r.p_inv, 1), "kW");
-  setText("outInvQ", fmt(r.q_inv, 1), r.qOvr ? "kVAr · datasheet" : "kVAr · derived");
+  setText("outInvQ", fmt(r.q_inv, 1), r.pqActive ? "kVAr · P–Q table" : r.qOvr ? "kVAr · manual" : "kVAr · derived");
+  const invQEl = document.getElementById("invQ");
+  invQEl.disabled = r.pqActive;
+  invQEl.title = r.pqActive ? "Governed by the Step 5 capability table (1.00 Vn row)" : "";
   const qNote = document.getElementById("qOvrNote");
-  if (r.qOvr && Math.hypot(r.p_inv, r.q_inv) > r.S_inv * 1.001) {
+  if (!r.pqActive && r.qOvr && Math.hypot(r.p_inv, r.q_inv) > r.S_inv * 1.001) {
     qNote.hidden = false;
-    qNote.innerHTML = `The operating point (<span class="mono">${fmt(r.p_inv, 1)} kW</span>, <span class="mono">${fmt(r.q_inv, 1)} kVAr</span>) exceeds the <span class="mono">${fmt(r.S_inv, 0)} kVA</span> rating — an effective apparent power of <span class="mono">${fmt(r.S_eff, 1)} kVA</span> is assumed. Confirm the datasheet allows P and Q simultaneously at this point.`;
+    qNote.innerHTML = `The operating point (<span class="mono">${fmt(r.p_inv, 1)} kW</span>, <span class="mono">${fmt(r.q_inv, 1)} kVAr</span>) exceeds the <span class="mono">${fmt(r.S_inv, 0)} kVA</span> rating — an effective apparent power of <span class="mono">${fmt(r.S_eff, 1)} kVA</span> is assumed. Confirm the manufacturer allows P and Q simultaneously at this point.`;
   } else {
     qNote.hidden = true;
   }
@@ -939,6 +1230,11 @@ function update() {
   document.getElementById("statQ").textContent = fmt(r.Q_total);
   document.getElementById("statS").textContent = fmt(r.S_actual);
   drawTriangle(r);
+
+  drawPQ(r);
+  const qOp = r.N > 0 ? r.Q_for_inv * 1000 / r.N : 0;
+  document.getElementById("pqOpNote").textContent =
+    r.N > 0 ? `${fmt(qOp, 1)} kVAr at ${fmt(r.p_inv, 1)} kW per inverter` : "—";
 
   const vrows = voltageSweep(state, r);
   drawVChart(vrows, r);
@@ -1055,6 +1351,15 @@ document.getElementById("addLoss").addEventListener("click", () => {
   renderLossRows(); update();
 });
 
+document.getElementById("addPqRow").addEventListener("click", () => {
+  state.pq.rows.push({ v: "", q: Array(state.pq.pLevels.length).fill(null) });
+  renderPQTable(); update();
+});
+document.getElementById("pqUse").addEventListener("change", e => {
+  state.pq.use = e.target.checked;
+  update();
+});
+
 document.getElementById("goalSeek").addEventListener("click", () => {
   const g = goalSeek(state);
   const note = document.getElementById("goalSeekNote");
@@ -1105,243 +1410,16 @@ document.getElementById("btnReset").addEventListener("click", () => {
   initAll();
 });
 
-/* ---------- datasheet PDF import ---------- */
-/* Best-effort in-browser extraction: inflate FlateDecode content streams with
-   DecompressionStream, pull text from Tj/TJ operators, then scan for kVAr
-   figures. Datasheets with subset/CID fonts may not yield readable text —
-   the manual field always works as the fallback. */
-async function extractPdfText(buf) {
-  const bytes = new Uint8Array(buf);
-  const latin1 = new TextDecoder("latin1").decode(bytes);
-  const chunks = [];
-  const re = /stream\r?\n/g;
-  let m;
-  while ((m = re.exec(latin1)) !== null) {
-    const start = m.index + m[0].length;
-    const end = latin1.indexOf("endstream", start);
-    if (end < 0) continue;
-    const dictStart = latin1.lastIndexOf("<<", m.index);
-    const dict = dictStart >= 0 ? latin1.slice(dictStart, m.index) : "";
-    let data = bytes.subarray(start, end);
-    // strip trailing EOL before 'endstream'
-    while (data.length && (data[data.length - 1] === 10 || data[data.length - 1] === 13)) data = data.subarray(0, data.length - 1);
-    if (/FlateDecode/.test(dict)) {
-      let ok = false;
-      for (const fmt of ["deflate", "deflate-raw"]) {
-        try {
-          const ds = new DecompressionStream(fmt);
-          const out = await new Response(new Blob([data]).stream().pipeThrough(ds)).arrayBuffer();
-          chunks.push(new TextDecoder("latin1").decode(out));
-          ok = true;
-          break;
-        } catch (e) { /* try next format */ }
-      }
-      if (!ok) continue;
-    } else if (!/(?:DCTDecode|JPXDecode|CCITTFaxDecode|Image)/.test(dict)) {
-      chunks.push(latin1.slice(start, end));
-    }
-    re.lastIndex = end + 9;
-  }
-  const parts = [];
-  for (const c of chunks) {
-    if (!/(?:Tj|TJ|BT)/.test(c)) continue;
-    // literal strings before Tj / inside TJ arrays
-    const strRe = /\(((?:\\.|[^\\()])*)\)/g;
-    let sm;
-    while ((sm = strRe.exec(c)) !== null) {
-      parts.push(sm[1].replace(/\\([nrtbf()\\])/g, (_, ch) => ({ n: "\n", r: "\r", t: "\t", b: "", f: "" }[ch] ?? ch))
-                      .replace(/\\(\d{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8))));
-    }
-  }
-  return parts.join(" ");
-}
-
-function scanUnitValues(text, res, found) {
-  for (const re of res) {
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      const v = parseFloat(m[1].replace(",", "."));
-      if (Number.isFinite(v) && v > 0 && v < 100000) {
-        const ctx = text.slice(Math.max(0, m.index - 60), Math.min(text.length, m.index + m[0].length + 20)).replace(/\s+/g, " ").trim();
-        if (!found.has(v)) found.set(v, ctx);
-      }
-    }
-  }
-}
-/* Finds "213 kVAr" / "kvar: 213" (reactive) and "363 kVA" / "kVA = 363"
-   (apparent — negative lookahead so kVAr never matches as kVA). */
-function scanCapabilities(text) {
-  const q = new Map(), s = new Map();
-  scanUnitValues(text, [
-    /(\d{1,4}(?:[.,]\d{1,2})?)\s*k\s?var/gi,
-    /kvar\s*[:=]?\s*(\d{1,4}(?:[.,]\d{1,2})?)/gi,
-  ], q);
-  scanUnitValues(text, [
-    /(\d{1,4}(?:[.,]\d{1,2})?)\s*k\s?va(?!r)/gi,
-    /kva(?!r)\s*[:=]?\s*(\d{1,4}(?:[.,]\d{1,2})?)/gi,
-  ], s);
-  const toArr = map => [...map.entries()].map(([value, context]) => ({ value, context }));
-  return { q: toArr(q), s: toArr(s) };
-}
-
-/* ---------- Excel (.xlsx) parsing: minimal ZIP + SpreadsheetML reader ---------- */
-async function unzipEntries(buf) {
-  const dv = new DataView(buf), u8 = new Uint8Array(buf);
-  let eocd = -1;
-  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65558); i--) {
-    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd < 0) throw new Error("not a zip archive");
-  const count = dv.getUint16(eocd + 10, true);
-  let off = dv.getUint32(eocd + 16, true);
-  const files = {};
-  for (let i = 0; i < count && dv.getUint32(off, true) === 0x02014b50; i++) {
-    const method = dv.getUint16(off + 10, true);
-    const csize = dv.getUint32(off + 20, true);
-    const nameLen = dv.getUint16(off + 28, true);
-    const extraLen = dv.getUint16(off + 30, true);
-    const cmtLen = dv.getUint16(off + 32, true);
-    const lho = dv.getUint32(off + 42, true);
-    const name = new TextDecoder().decode(u8.subarray(off + 46, off + 46 + nameLen));
-    files[name] = { method, csize, lho };
-    off += 46 + nameLen + extraLen + cmtLen;
-  }
-  return async name => {
-    const f = files[name];
-    if (!f) return null;
-    const nl = dv.getUint16(f.lho + 26, true), el = dv.getUint16(f.lho + 28, true);
-    const data = u8.subarray(f.lho + 30 + nl + el, f.lho + 30 + nl + el + f.csize);
-    if (f.method === 0) return new TextDecoder().decode(data);
-    const out = await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
-    return new TextDecoder().decode(out);
-  };
-}
-
-/* Returns one text line per spreadsheet row: "label | 363 | kVA" */
-async function extractXlsxRows(buf) {
-  const read = await unzipEntries(buf);
-  const parse = xml => new DOMParser().parseFromString(xml, "application/xml");
-  const shared = [];
-  const ssXml = await read("xl/sharedStrings.xml");
-  if (ssXml) {
-    for (const si of parse(ssXml).getElementsByTagName("si")) {
-      shared.push([...si.getElementsByTagName("t")].map(t => t.textContent).join(""));
-    }
-  }
-  const lines = [];
-  for (let i = 1; i <= 30; i++) {
-    const xml = await read(`xl/worksheets/sheet${i}.xml`);
-    if (!xml) break;
-    for (const row of parse(xml).getElementsByTagName("row")) {
-      const cells = [];
-      for (const c of row.getElementsByTagName("c")) {
-        const t = c.getAttribute("t");
-        const v = c.getElementsByTagName("v")[0]?.textContent;
-        const inl = c.getElementsByTagName("is")[0];
-        if (t === "s" && v != null) cells.push(shared[parseInt(v, 10)] ?? "");
-        else if (t === "inlineStr" && inl) cells.push([...inl.getElementsByTagName("t")].map(x => x.textContent).join(""));
-        else if (v != null) cells.push(v);
-      }
-      const line = cells.map(x => String(x).trim()).filter(Boolean).join(" | ");
-      if (line) lines.push(line);
-    }
-  }
-  return lines;
-}
-
-/* Unit-based scan per row, plus label-based fallback for rows without units */
-function scanXlsx(lines) {
-  const q = new Map(), s = new Map();
-  for (const line of lines) {
-    const hit = scanCapabilities(line);
-    hit.q.forEach(c => { if (!q.has(c.value)) q.set(c.value, line); });
-    hit.s.forEach(c => { if (!s.has(c.value)) s.set(c.value, line); });
-    if (!hit.q.length && !hit.s.length) {
-      const nums = [...line.matchAll(/(?:^|\| )\s*(\d{1,6}(?:[.,]\d{1,3})?)\s*(?=\||$)/g)]
-        .map(m => parseFloat(m[1].replace(",", "."))).filter(v => v > 0 && v < 100000);
-      if (nums.length) {
-        if (/reactive|q\s*max/i.test(line)) nums.forEach(v => { if (!q.has(v)) q.set(v, line); });
-        else if (/apparent|capacit|kva rating/i.test(line)) nums.forEach(v => { if (!s.has(v)) s.set(v, line); });
-      }
-    }
-  }
-  const toArr = map => [...map.entries()].map(([value, context]) => ({ value, context }));
-  return { q: toArr(q), s: toArr(s) };
-}
-
-function renderDatasheet() {
-  const box = document.getElementById("pdfResult");
-  let ds = state.datasheet;
-  if (ds && ds.candidates && !ds.q) ds = state.datasheet = { name: ds.name, q: ds.candidates, s: [] };
-  if (!ds) { box.hidden = true; return; }
-  box.hidden = false;
-  const qc = ds.q || [], sc = ds.s || [];
-  box.className = "note" + (qc.length || sc.length ? " accent" : "");
-  if (!qc.length && !sc.length) {
-    box.innerHTML = `<b>${escapeHtml(ds.name)}</b>: no kVA or kVAr figure could be read from this file
-      (scanned or image-based documents aren't machine-readable, and legacy .xls needs saving
-      as .xlsx). Open it, find the rating, and type it into the fields above.
-      <button type="button" id="dsClear" style="margin-left:8px">Remove</button>`;
-  } else {
-    const chipRow = (label, list, cls, unit) => list.length ? `<div style="margin-top:6px">${label}:
-      <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:4px">${
-        list.slice(0, 8).map(c => `<button type="button" class="${cls}" data-v="${c.value}"
-          title="${escapeHtml(c.context)}" style="font-family:var(--mono)">${fmt(c.value, c.value % 1 ? 1 : 0)} ${unit}</button>`).join("")
-      }</span></div>` : "";
-    box.innerHTML = `<b>${escapeHtml(ds.name)}</b> — figures found (hover for context, click to apply):
-      ${chipRow("Apparent power", sc, "ds-apply-s", "kVA")}
-      ${chipRow("Reactive capability", qc, "ds-apply-q", "kVAr")}
-      <div style="margin-top:8px"><button type="button" id="dsClear">Remove</button></div>`;
-    box.querySelectorAll(".ds-apply-q").forEach(b => b.addEventListener("click", () => {
-      state.invQOverride = parseFloat(b.dataset.v);
-      document.getElementById("invQ").value = state.invQOverride;
-      update();
-    }));
-    box.querySelectorAll(".ds-apply-s").forEach(b => b.addEventListener("click", () => {
-      state.invKVA = parseFloat(b.dataset.v);
-      document.getElementById("invKVA").value = state.invKVA;
-      update();
-    }));
-  }
-  const clr = document.getElementById("dsClear");
-  if (clr) clr.addEventListener("click", () => { state.datasheet = null; renderDatasheet(); save(); });
-}
-
-document.getElementById("btnPdf").addEventListener("click", () => document.getElementById("pdfFile").click());
-document.getElementById("pdfFile").addEventListener("change", async e => {
-  const f = e.target.files[0];
-  if (!f) return;
-  const box = document.getElementById("pdfResult");
-  box.hidden = false;
-  box.className = "note";
-  box.textContent = `Reading ${f.name}…`;
-  try {
-    const buf = await f.arrayBuffer();
-    let cand;
-    if (/\.xls[xm]$/i.test(f.name)) {
-      cand = scanXlsx(await extractXlsxRows(buf));
-    } else if (/\.xls$/i.test(f.name)) {
-      cand = { q: [], s: [] }; // legacy binary .xls isn't supported — save as .xlsx
-    } else {
-      cand = scanCapabilities(await extractPdfText(buf));
-    }
-    state.datasheet = { name: f.name, q: cand.q, s: cand.s };
-  } catch (err) {
-    state.datasheet = { name: f.name, q: [], s: [] };
-  }
-  renderDatasheet();
-  save();
-  e.target.value = "";
-});
-
 function initAll() {
   ["projectName","installedDC","gridLimit","powerFactor","pfSense","xmerMargin","invKVA","invPF","capBank"]
     .forEach(id => { document.getElementById(id).value = state[id] ?? ""; });
   if (!Array.isArray(state.voltLevels) || !state.voltLevels.length) state.voltLevels = [...DEFAULTS.voltLevels];
+  if (!state.pq || !Array.isArray(state.pq.rows) || !Array.isArray(state.pq.pLevels)) state.pq = structuredClone(DEFAULTS.pq);
   document.getElementById("voltLevels").value = state.voltLevels.join(", ");
   document.getElementById("invCount").value = state.invCountOverride ?? "";
   document.getElementById("invQ").value = state.invQOverride ?? "";
-  renderDatasheet();
+  document.getElementById("pqUse").checked = !!state.pq.use;
+  renderPQTable();
   renderXmerRows();
   renderLossRows();
   update();
