@@ -2,103 +2,154 @@
 """
 Created on Mon Dec 12 10:36:38 2022
 
-@Author: Mohammad Maher Eneizat 
+@Author: Mohammad Maher Eneizat
 @Email: mohammad.eneizat@iu-study.org
-@Github: 
+@Github:
 
-The ideal_function module performs finding ideal functions and mapping
- with test points
-
+The ideal_function module finds the best-fitting ideal functions for the
+training data (least-squares criterion) and maps test points onto them.
 """
 
-#import external
-import  numpy as np
+from dataclasses import dataclass
+
+import numpy as np
+import pandas as pd
+
+# A test point maps to an ideal function when its deviation does not exceed
+# the largest training deviation of that function by more than sqrt(2).
+MAPPING_FACTOR = np.sqrt(2)
 
 
+class DataValidationError(Exception):
+    """Raised when an input dataset does not have the expected structure."""
 
-class ideal_function:
-    
-    """ Class ideal_function is used for find ideal functions and mapping """
-    
 
-    
-    
-    def ideal_function_fit(i,train,ideal,train_np,ideal_np):
-        
+@dataclass
+class BestFit:
+    """Result of fitting one training function against all ideal functions.
+
+    Attributes:
+        train_column: name of the training column (e.g. "y1").
+        ideal_column: name of the chosen ideal column (e.g. "y25").
+        ideal_index: 1-based positional index of the ideal column.
+        sse: minimum sum of squared errors between the two functions.
+        max_deviation: largest absolute deviation between the two functions.
+    """
+
+    train_column: str
+    ideal_column: str
+    ideal_index: int
+    sse: float
+    max_deviation: float
+
+
+class IdealFunctionFinder:
+    """Finds, for every training function, the ideal function that minimises
+    the sum of squared errors (least-squares criterion)."""
+
+    def __init__(self, train_df, ideal_df):
+        """Validate and store the training and ideal datasets.
+
+        Both dataframes must share the same x values in their first column;
+        every remaining column is treated as one function.
         """
-        function finds matches between training functions and ideal functions based on 
-        Minimum SSE (sum of the squared errors)
-        return: Minimum SSE, index ideal functions, the largest divertion
-        """
-        
-        
-        # Loop to find sequred divertion between train data and ideal data
-        Div_squerd_sum_list = []
-        for x in range (len(ideal.columns)):
-            Div_squerd = (train_np[0:,i:i+1] - ideal_np[0:,1:x+1])**2
-            
-        # Loop to find sum of sequred divertion between train data and ideal data    
-        for y in range (len(ideal.columns)-1):
-            Div_squerd_sum = np.sum(Div_squerd[0:,y:y+1])
-            Div_squerd_sum_list.append(Div_squerd_sum)
-            
-        # find Minimum SSE, index ideal functions, the largest divertion  
-        Index_Y_ideal = Div_squerd_sum_list.index(min(Div_squerd_sum_list))+1
-        min_Div_squerd_sum = min(Div_squerd_sum_list)
-    
-    
-        Div = abs(train_np[0:,i:i+1] - ideal_np[0:,Index_Y_ideal:Index_Y_ideal+1])
-        max_div = np.max(Div)
-        
-        return min_Div_squerd_sum,Index_Y_ideal,max_div
-              
-    
-    
-    def mapping_find(x_test_np,x_ideal_np,y_test_np,y_ideal_np,ideal_function_max_div,ideal_function_indexs):
-        
-        """
-        determine for each and every x-y-pair test points are mapping with four ideal functions
-        :return: test function paired,divertion and No. of ideal function
-        """
-    
-        X_test_results=[] 
-        Y_test_results = []
-        Delta_results = []
-        No_of_y_results = []
-        
-        """
-        # Loop to find absolute divertion between test data and ideal data, compare results with 
-        the largest divertion between ideal functions and train data multiply with mappaing error = sqrt(2)
-        if less than or equal thats mean test pairs are mapping with the ideal function
-        """
-        
-        
-        map_error= np.sqrt(2)
-        ideal_function_max_div = np.array(ideal_function_max_div)
-        for i in range (100):
-            for j in range(400):
-                if x_test_np[i] == x_ideal_np[j]:
-                    for y in range (4):
-                        if (abs(y_test_np[i] - y_ideal_np[j:j+1,y])<= (ideal_function_max_div*map_error)).any():
-                            X_test_results = np.append(X_test_results,x_test_np[i])
-                            Y_test_results = np.append(Y_test_results,y_test_np[i])
-                            Delta_results=np.append(Delta_results,abs(y_test_np[i] - y_ideal_np[j:j+1,y]))
-                            No_of_y_results=np.append(No_of_y_results,ideal_function_indexs[y:y+1])
-                            
-                            
-        # find est function paired,divertion and No. of ideal function                    
-        results_dict = {"X (test func)":X_test_results,"Y (test func)":Y_test_results,"Delta Y (test func)":Delta_results,
-                    "No. of ideal func":No_of_y_results}
-        
-        return results_dict,X_test_results,Y_test_results
-    
-    
-    
+        self._validate(train_df, ideal_df)
+        self.train_df = train_df
+        self.ideal_df = ideal_df
+        self.best_fits = []
 
-    
-    
+    @staticmethod
+    def _validate(train_df, ideal_df):
+        """Check that both datasets are usable and aligned on x."""
+        if train_df.shape[1] < 2:
+            raise DataValidationError(
+                "training data needs an x column and at least one y column"
+            )
+        if ideal_df.shape[1] < 2:
+            raise DataValidationError(
+                "ideal data needs an x column and at least one y column"
+            )
+        if len(train_df) != len(ideal_df):
+            raise DataValidationError(
+                "training and ideal data must have the same number of rows"
+            )
+        if not np.allclose(
+            train_df.iloc[:, 0].to_numpy(dtype=float),
+            ideal_df.iloc[:, 0].to_numpy(dtype=float),
+        ):
+            raise DataValidationError(
+                "training and ideal data must share the same x values"
+            )
+
+    def find_best_fits(self):
+        """Return one BestFit per training function.
+
+        For each training column the sum of squared errors against every
+        ideal column is computed in one vectorised step; the ideal function
+        with the smallest SSE wins.
+        """
+        ideal_y = self.ideal_df.iloc[:, 1:].to_numpy(dtype=float)
+
+        self.best_fits = []
+        for column in self.train_df.columns[1:]:
+            train_y = self.train_df[column].to_numpy(dtype=float)
+            sse = ((ideal_y - train_y[:, np.newaxis]) ** 2).sum(axis=0)
+            best = int(np.argmin(sse))
+            max_deviation = np.abs(ideal_y[:, best] - train_y).max()
+
+            self.best_fits.append(
+                BestFit(
+                    train_column=column,
+                    ideal_column=self.ideal_df.columns[best + 1],
+                    ideal_index=best + 1,
+                    sse=float(sse[best]),
+                    max_deviation=float(max_deviation),
+                )
+            )
+        return self.best_fits
 
 
-    
-    
-    
+class TestPointMapper(IdealFunctionFinder):
+    """Extends IdealFunctionFinder with the mapping of test points onto the
+    chosen ideal functions."""
+
+    RESULT_COLUMNS = [
+        "X (test func)",
+        "Y (test func)",
+        "Delta Y (test func)",
+        "No. of ideal func",
+    ]
+
+    def map_test_points(self, test_df):
+        """Map every x-y test pair onto the chosen ideal functions.
+
+        A pair maps to an ideal function when the absolute deviation between
+        the test y and the ideal y at the same x does not exceed that
+        function's largest training deviation multiplied by sqrt(2).
+
+        Returns a dataframe with the test point, its deviation and the number
+        of the ideal function it maps to (one row per successful mapping).
+        """
+        if test_df.shape[1] < 2:
+            raise DataValidationError(
+                "test data needs an x column and a y column"
+            )
+        if not self.best_fits:
+            self.find_best_fits()
+
+        x_ideal = self.ideal_df.iloc[:, 0].to_numpy(dtype=float)
+        ideal_y = self.ideal_df.iloc[:, 1:].to_numpy(dtype=float)
+
+        rows = []
+        for x_test, y_test in test_df.iloc[:, :2].itertuples(index=False):
+            matches = np.nonzero(np.isclose(x_ideal, x_test))[0]
+            if matches.size == 0:
+                continue
+            row = matches[0]
+
+            for fit in self.best_fits:
+                delta = abs(y_test - ideal_y[row, fit.ideal_index - 1])
+                if delta <= fit.max_deviation * MAPPING_FACTOR:
+                    rows.append((x_test, y_test, delta, fit.ideal_index))
+
+        return pd.DataFrame(rows, columns=self.RESULT_COLUMNS)
