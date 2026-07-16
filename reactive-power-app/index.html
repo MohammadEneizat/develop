@@ -274,6 +274,35 @@
   .check .msg { font-size: 12.5px; }
   .check .msg b { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
+  /* voltage sweep */
+  .vchart-wrap { position: relative; margin-top: 6px; }
+  .vtip {
+    position: absolute; pointer-events: none; z-index: 5;
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 7px;
+    box-shadow: var(--shadow); padding: 7px 10px; font-size: 11.5px;
+    font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap;
+    display: none;
+  }
+  .vtip .t { color: var(--muted); }
+  table.vtable { width: 100%; border-collapse: collapse; margin-top: 14px; }
+  table.vtable th {
+    text-align: right; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600; padding: 0 10px 7px 0;
+    border-bottom: 1px solid var(--hairline);
+  }
+  table.vtable th:first-child { text-align: left; }
+  table.vtable td {
+    font-family: var(--mono); font-size: 12.5px; font-variant-numeric: tabular-nums;
+    text-align: right; padding: 5px 10px 5px 0; white-space: nowrap;
+    border-bottom: 1px dashed var(--hairline); color: var(--ink-2);
+  }
+  table.vtable td:first-child { text-align: left; color: var(--ink); font-weight: 600; }
+  table.vtable tr:last-child td { border-bottom: none; }
+  .vstatus { display: inline-flex; align-items: center; gap: 5px; font-family: var(--sans); font-size: 11.5px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+  .vstatus.ok { background: var(--good-bg); color: var(--good); }
+  .vstatus.bad { background: var(--crit-bg); color: var(--crit); }
+  .vstatus.warn { background: var(--warn-bg); color: var(--warn); }
+
   .kv { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 12.5px; border-bottom: 1px dashed var(--hairline); }
   .kv:last-child { border-bottom: none; }
   .kv .k { color: var(--ink-2); }
@@ -409,6 +438,31 @@
       <div class="note">A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. (The original worksheet added it to the demand — corrected here.)</div>
     </section>
 
+    <!-- Step 5 -->
+    <section class="card">
+      <h2><span class="stepno">STEP 5</span> Reactive capability vs grid voltage</h2>
+      <p class="sub">Grid codes require reactive support across a voltage band, not just at nominal. Below 1.00 p.u. the inverter is current-limited, so its apparent power shrinks with voltage (S = V × S<sub>rated</sub>); above 1.00 p.u. it holds rated apparent power. With active power dispatched first (P-priority), whatever capability remains is available as reactive power.</p>
+      <div class="fields">
+        <div class="field" style="grid-column: 1 / -1">
+          <label for="voltLevels">Voltage levels to evaluate</label>
+          <div class="inwrap"><input id="voltLevels" type="text" value="0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15" spellcheck="false"><span class="unit">p.u.</span></div>
+        </div>
+      </div>
+      <div class="vchart-wrap">
+        <svg id="vchart" viewBox="0 0 760 300" role="img" aria-label="Plant reactive power capability versus grid voltage, compared with the required reactive demand"></svg>
+        <div class="vtip" id="vtip"></div>
+      </div>
+      <div class="rowscroll">
+        <table class="vtable" id="vtable">
+          <thead>
+            <tr><th>Voltage (p.u.)</th><th>S / inverter (kVA)</th><th>Q / inverter (kVAr)</th><th>Plant Q capability (MVAr)</th><th>Margin vs demand (MVAr)</th><th>Status</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="note">P-priority at the dispatched operating point (active power per inverter from Step 4, plus the capacitor bank). If the reduced apparent power cannot even carry the active power, the point is flagged — active power would be curtailed there.</div>
+    </section>
+
   </div>
 
   <!-- Results rail -->
@@ -475,6 +529,7 @@ const DEFAULTS = {
   invKVA: 363,
   invPF: 0.918,
   capBank: 0,
+  voltLevels: [0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15],
   xmers: [
     { name: "TS Block 1", qty: 3, rating: 10164, z: 9.5 },
     { name: "TS Block 2", qty: 4, rating: 7260, z: 9.5 },
@@ -496,7 +551,10 @@ function load() {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if (s && Array.isArray(s.xmers) && Array.isArray(s.losses)) return s;
+      if (s && Array.isArray(s.xmers) && Array.isArray(s.losses)) {
+        if (!Array.isArray(s.voltLevels) || !s.voltLevels.length) s.voltLevels = [...DEFAULTS.voltLevels];
+        return s;
+      }
     }
   } catch (e) { /* corrupted store — fall through to defaults */ }
   return structuredClone(DEFAULTS);
@@ -560,6 +618,23 @@ function goalSeek(s) {
   const pfMax = clamp(Math.sqrt(Math.max(0, 1 - qRatio * qRatio)), pfMin, 0.9999);
   const pf = Math.round(((pfMin + pfMax) / 2) * 1e4) / 1e4;
   return { N, pfMin, pfMax, pf: clamp(pf, pfMin, pfMax) };
+}
+
+/* Voltage sweep: per-inverter apparent power follows the current limit below
+   nominal (S = V × S_rated) and holds rated above nominal. P-priority: the
+   dispatched active power per inverter is served first; the remainder is
+   available as reactive capability. */
+function voltageSweep(s, r) {
+  const levels = (Array.isArray(s.voltLevels) ? s.voltLevels : [])
+    .map(num).filter(v => v > 0).sort((a, b) => a - b);
+  return levels.map(V => {
+    const S_v = r.S_inv * Math.min(V, 1);                 // kVA available
+    const curtailed = S_v < r.p_inv - 1e-9;               // can't even carry P
+    const q_v = curtailed ? 0 : Math.sqrt(Math.max(0, S_v * S_v - r.p_inv * r.p_inv)); // kVAr
+    const Q_plant = r.N * q_v / 1000 + r.Q_capbank;       // MVAr
+    const margin = Q_plant - r.Q_total;
+    return { V, S_v, q_v, Q_plant, margin, curtailed, ok: !curtailed && margin >= -1e-9 };
+  });
 }
 
 function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; }
@@ -679,6 +754,109 @@ function drawTriangle(r) {
   svg.append(el("text", { x: x0 + px / 2 - 8, y: y1 + (y0 - y1) / 2 - 10, fill: cInk, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `S ${fmt(r.S_actual)} MVA`));
 }
 
+/* ---------- voltage capability chart & table ---------- */
+function drawVChart(rows, r) {
+  const svg = document.getElementById("vchart");
+  const tip = document.getElementById("vtip");
+  const css = getComputedStyle(document.documentElement);
+  const cLine = css.getPropertyValue("--series-p").trim();
+  const cInk = css.getPropertyValue("--ink").trim();
+  const cMuted = css.getPropertyValue("--muted").trim();
+  const cGrid = css.getPropertyValue("--grid").trim();
+  const cCrit = css.getPropertyValue("--crit").trim();
+  const cSurface = css.getPropertyValue("--surface").trim();
+
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  svg.innerHTML = "";
+  tip.style.display = "none";
+  if (!rows.length) return;
+
+  const W = 760, H = 300, mL = 52, mR = 118, mT = 30, mB = 40;
+  const vMin = rows[0].V, vMax = rows[rows.length - 1].V;
+  const yMax = Math.max(r.Q_total, ...rows.map(d => d.Q_plant)) * 1.12 || 1;
+  const x = V => vMax === vMin ? mL + (W - mL - mR) / 2 : mL + (V - vMin) / (vMax - vMin) * (W - mL - mR);
+  const y = q => H - mB - (q / yMax) * (H - mT - mB);
+  const mono = "ui-monospace, Menlo, monospace";
+
+  // gridlines + y-axis ticks
+  const ticks = 4;
+  for (let i = 0; i <= ticks; i++) {
+    const qv = yMax / ticks * i, yy = y(qv);
+    svg.append(el("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
+    svg.append(el("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(qv, 1)));
+  }
+  svg.append(el("text", { x: mL - 8, y: mT - 14, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "MVAr"));
+  // x-axis ticks
+  rows.forEach(d => {
+    svg.append(el("text", { x: x(d.V), y: H - mB + 17, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(d.V, 2)));
+  });
+  svg.append(el("text", { x: (mL + W - mR) / 2, y: H - 5, "text-anchor": "middle", fill: cMuted, "font-size": 10.5 }, "Grid voltage (p.u.)"));
+
+  // required-demand reference line
+  const yReq = y(r.Q_total);
+  svg.append(el("line", { x1: mL, y1: yReq, x2: W - mR, y2: yReq, stroke: cInk, "stroke-width": 1.5, "stroke-dasharray": "6 4" }));
+  const refLbl = el("text", { x: W - mR + 8, y: yReq + 3.5, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono });
+  refLbl.append(el("tspan", { x: W - mR + 8, dy: 0 }, `required Q`));
+  refLbl.append(el("tspan", { x: W - mR + 8, dy: 12 }, `${fmt(r.Q_total)} MVAr`));
+  svg.append(refLbl);
+
+  // capability line
+  const path = rows.map((d, i) => `${i ? "L" : "M"} ${x(d.V).toFixed(1)} ${y(d.Q_plant).toFixed(1)}`).join(" ");
+  svg.append(el("path", { d: path, fill: "none", stroke: cLine, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  const last = rows[rows.length - 1];
+  const yCap = y(last.Q_plant);
+  // the reference label occupies yReq..yReq+12; dodge above the line on collision
+  const capLblY = (yCap > yReq - 26 && yCap < yReq + 24) ? yReq - 12 : yCap + 3.5;
+  svg.append(el("text", { x: W - mR + 8, y: capLblY, fill: cLine, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "capability"));
+
+  // points + hover targets
+  rows.forEach(d => {
+    const fill = d.ok ? cLine : cCrit;
+    svg.append(el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 4.5, fill, stroke: cSurface, "stroke-width": 2 }));
+    const hit = el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 14, fill: "transparent", cursor: "pointer" });
+    hit.addEventListener("mouseenter", () => {
+      tip.innerHTML = `<span class="t">${fmt(d.V, 2)} p.u.</span><br>Q capability ${fmt(d.Q_plant)} MVAr<br>` +
+        (d.curtailed ? `<span style="color:${cCrit}">P curtailed at this voltage</span>`
+                     : `margin ${(d.margin >= 0 ? "+" : "")}${fmt(d.margin)} MVAr`);
+      tip.style.display = "block";
+      const wrap = svg.parentElement.getBoundingClientRect();
+      const sr = svg.getBoundingClientRect();
+      const px = sr.left - wrap.left + x(d.V) / W * sr.width;
+      const py = sr.top - wrap.top + y(d.Q_plant) / H * sr.height;
+      tip.style.left = Math.min(px + 12, wrap.width - tip.offsetWidth - 4) + "px";
+      tip.style.top = Math.max(py - tip.offsetHeight - 10, 0) + "px";
+    });
+    hit.addEventListener("mouseleave", () => { tip.style.display = "none"; });
+    svg.append(hit);
+  });
+}
+
+function renderVTable(rows, r) {
+  const tb = document.querySelector("#vtable tbody");
+  tb.innerHTML = "";
+  rows.forEach(d => {
+    const tr = document.createElement("tr");
+    const status = d.curtailed
+      ? `<span class="vstatus warn">⚠ P curtailed</span>`
+      : d.ok
+        ? `<span class="vstatus ok">✓ meets demand</span>`
+        : `<span class="vstatus bad">✕ short ${fmt(-d.margin)} MVAr</span>`;
+    tr.innerHTML = `
+      <td>${fmt(d.V, 2)}</td>
+      <td>${fmt(d.S_v, 1)}</td>
+      <td>${fmt(d.q_v, 1)}</td>
+      <td>${fmt(d.Q_plant)}</td>
+      <td>${(d.margin >= 0 ? "+" : "") + fmt(d.margin)}</td>
+      <td>${status}</td>`;
+    tb.append(tr);
+  });
+}
+
 /* ---------- render ---------- */
 function update() {
   const r = compute(state);
@@ -700,6 +878,10 @@ function update() {
   document.getElementById("statQ").textContent = fmt(r.Q_total);
   document.getElementById("statS").textContent = fmt(r.S_actual);
   drawTriangle(r);
+
+  const vrows = voltageSweep(state, r);
+  drawVChart(vrows, r);
+  renderVTable(vrows, r);
 
   // breakdown bars
   const bars = document.getElementById("qBars");
@@ -775,6 +957,12 @@ bind("invKVA", "invKVA");
 bind("invPF", "invPF");
 bind("capBank", "capBank");
 
+const voltInput = document.getElementById("voltLevels");
+voltInput.addEventListener("input", () => {
+  state.voltLevels = voltInput.value.split(/[,;\s]+/).map(parseFloat).filter(v => Number.isFinite(v) && v > 0);
+  update();
+});
+
 document.getElementById("addXmer").addEventListener("click", () => {
   state.xmers.push({ name: `Transformer group ${state.xmers.length + 1}`, qty: 1, rating: 1000, z: 6 });
   renderXmerRows(); update();
@@ -830,6 +1018,8 @@ document.getElementById("btnReset").addEventListener("click", () => {
 function initAll() {
   ["projectName","installedDC","gridLimit","powerFactor","pfSense","xmerMargin","invKVA","invPF","capBank"]
     .forEach(id => { document.getElementById(id).value = state[id] ?? ""; });
+  if (!Array.isArray(state.voltLevels) || !state.voltLevels.length) state.voltLevels = [...DEFAULTS.voltLevels];
+  document.getElementById("voltLevels").value = state.voltLevels.join(", ");
   renderXmerRows();
   renderLossRows();
   update();

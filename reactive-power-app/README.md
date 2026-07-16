@@ -19,6 +19,15 @@ injection limit and the reactive power demand.
 4. **Inverter capability** — per-inverter reactive capability `√(S² − P²)` at
    the chosen inverter power factor, required inverter count
    `⌈Q_total / q_inv⌉`, and the net power actually delivered to the grid.
+5. **Reactive capability vs grid voltage** *(new, not in the worksheet)* — the
+   plant's reactive capability evaluated across a grid-voltage band
+   (default 0.80–1.15 p.u., editable). Below 1.00 p.u. the inverter is
+   current-limited, so apparent power scales with voltage
+   (`S(V) = V × S_rated`); above 1.00 p.u. it holds rated apparent power.
+   Active power is dispatched first (P-priority) and the remainder is available
+   as reactive power: `q(V) = √(S(V)² − p²)`. Each level gets a pass/fail
+   verdict against the reactive demand, with active-power-curtailment flagging
+   when `S(V) < p`, plus a capability curve chart with hover details.
 
 The engine was verified against the workbook's cached values: all intermediate
 and final results (MVA rating, MVAr demand, transformer demand, losses,
