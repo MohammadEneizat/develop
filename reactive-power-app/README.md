@@ -62,7 +62,26 @@ apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
   - Generic fixed-PF presets and **Custom**.
 
   Selecting a code fills the parameters (still editable — editing switches to
-  Custom), shows the clause summary, and syncs the plant power factor. The app draws the requirement's P–Q envelope and V–Q profile,
+  Custom), shows the clause summary, and syncs the plant power factor.
+- **G99-style compliance diagrams (Step 7)** — the two assessment curves of a
+  professional G99 Type C reactive power study:
+  - **V–Q diagram at Registered Capacity**: the requirement polygon (for G99
+    the true asymmetric hexagon of Fig. 13.13 — full lagging/export Q at
+    0.95–1.00 p.u. tapering to zero at 1.05, full leading/absorption at
+    1.00–1.05 tapering to zero at 0.95) against the plant's capability
+    envelope over the voltage range, both Q directions, with the A/B/E/F
+    corner load-flow points marked.
+  - **P–Q diagram at nominal voltage**: the G99 Fig. 13.14 envelope — full
+    ±Q from 20% output, the DNO-discretion lead-side relief triangle between
+    20–50%, and the ±5% tolerance stub below MSOL — against the plant
+    capability loop.
+  - A **corner-point table** (the A/B/E/F cases of the study's Table 3-1) in
+    the results rail with per-point pass/fail.
+  - Calculation convention matched to the study: inverters dispatch the
+    active power actually needed — (grid limit + losses) ÷ count — so surplus
+    inverters free reactive headroom; export capability is net of transformer
+    consumption while absorption is aided by it; the capacitor bank counts
+    for export only; inverter capability is taken as symmetric. The app draws the requirement's P–Q envelope and V–Q profile,
   overlays the V-dependent requirement on the voltage sweep (replacing the
   flat demand line), and adds a **Grid code compliance** chart in the results:
   plant reactive capability at the POI (net of transformer consumption,

@@ -579,7 +579,21 @@
           <tbody></tbody>
         </table>
       </div>
-      <div class="note">P-priority at the dispatched operating point (active power per inverter from Step 4, plus the capacitor bank). If the reduced apparent power cannot even carry the active power, the point is flagged — active power would be curtailed there.</div>
+      <div class="note">Inverters are dispatched at the active power actually needed to deliver the grid limit — (limit + losses) ÷ count — as in a G99 study, so surplus inverters free reactive headroom. If even that dispatch exceeds the capability at a voltage, the point is flagged as curtailed.</div>
+    </section>
+
+    <!-- Step 7 -->
+    <section class="card">
+      <h2><span class="stepno">STEP 7</span> Grid-code compliance diagrams</h2>
+      <p class="sub">The two assessment curves of a G99 Type C reactive power study. <b>V–Q at Registered Capacity</b>: the requirement polygon (dashed) against the plant's capability envelope at full output across the voltage range. <b>P–Q at nominal voltage</b>: the requirement envelope against plant capability over the whole output range. Capability is at the point of interconnection — net of transformer consumption on the export side, aided by it on the absorption side; inverter capability is taken as symmetric and the capacitor bank counts for export only.</p>
+      <figure>
+        <svg id="vqDiag" viewBox="0 0 760 360" role="img" aria-label="V-Q diagram at Registered Capacity: grid code requirement polygon versus plant capability envelope"></svg>
+        <figcaption>V–Q diagram at the connection point, Registered Capacity dispatch. Consumption (lead) left, production (lag) right.</figcaption>
+      </figure>
+      <figure style="margin-top:16px">
+        <svg id="pqDiag" viewBox="0 0 760 400" role="img" aria-label="P-Q diagram at nominal voltage: grid code requirement envelope versus plant capability"></svg>
+        <figcaption>P–Q diagram at the connection point, nominal voltage. The dashed MSOL line marks 20% of Registered Capacity.</figcaption>
+      </figure>
     </section>
 
   </div>
@@ -626,15 +640,13 @@
         <span class="icon-mark" id="compIcon">•</span>
         <div class="msg" id="compMsg">—</div>
       </div>
-      <figure style="margin-top:12px">
-        <svg id="compchart" viewBox="0 0 360 230" role="img" aria-label="Plant reactive capability versus grid code requirement across the output range"></svg>
-        <figcaption>Q at the POI vs plant output, nominal voltage. Capacitive side shown; the inductive side is symmetric. Capability is net of transformer consumption.</figcaption>
-      </figure>
-      <div style="margin-top:10px">
-        <div class="kv"><span class="k">Required at full output</span><span class="v" id="compReq">—</span></div>
-        <div class="kv"><span class="k">Capability at full output</span><span class="v" id="compCap">—</span></div>
-        <div class="kv"><span class="k">Worst margin across output range</span><span class="v" id="compWorst">—</span></div>
+      <div class="rowscroll" style="margin-top:12px">
+        <table class="vtable" id="cornerTable">
+          <thead><tr><th>Point</th><th>V (p.u.)</th><th>Direction</th><th>Q req (MVAr)</th><th>Q avail (MVAr)</th><th>Status</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
+      <div class="note" style="margin-top:10px">Corner points of the V–Q envelope at Registered Capacity (the A/B/E/F load-flow cases of a G99 study). Full diagrams in Step 7.</div>
     </section>
 
     <section class="card">
@@ -663,7 +675,7 @@ const DEFAULTS = {
   powerFactor: 0.95,
   pfSense: "Leading",
   xmerMargin: 10,
-  gridCode: { preset: "gb_g99", qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 50, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
+  gridCode: { preset: "gb_g99", qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10, vqAsym: true, leadRelief: true },
   invKVA: 363,
   invPF: 0.918,
   capBank: 0,
@@ -717,6 +729,9 @@ function load() {
           if (!["pf95rect", "pf90rect"].includes(s.gridCode.preset)) s.gridCode.preset = "custom";
         }
         if (typeof s.gridCode.pFull !== "number") s.gridCode.pFull = s.gridCode.pMin ?? 20;
+        if (s.gridCode.preset === "gb_g99" && s.gridCode.vqAsym === undefined) {
+          Object.assign(s.gridCode, { pFull: 20, vqAsym: true, leadRelief: true });
+        }
         delete s.datasheet;
         return s;
       }
@@ -782,9 +797,10 @@ function pqIsActive(s) {
 const GC_PRESETS = {
   gb_g99: {
     label: "United Kingdom — ENA G99 / GB Grid Code (Type C/D PPM)",
-    qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 50,
+    qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20,
     vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10,
-    note: "0.95 lead/lag at Registered Capacity (Q = ±0.33 Pmax); full range maintained down to 50% output, reducing linearly below, none required under 20% (Grid Code ECC.6.3.2 / G99 §13)." },
+    vqAsym: true, leadRelief: true,
+    note: "0.95 lead/lag at Registered Capacity (Q = ±0.33 Pmax) from 20% output (G99 §13.5.5, Fig. 13.13/13.14). V-Q is asymmetric: full lagging (export) 0.95–1.00 p.u. tapering to zero at 1.05; full leading (absorb) 1.00–1.05 tapering to zero at 0.95. Lead-side relief triangle 20–50% output at DNO discretion." },
   de_4110: {
     label: "Germany — VDE-AR-N 4110 (medium voltage)",
     qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20,
@@ -826,59 +842,104 @@ function gcQmaxPu(gc) {
   if (q > 0) return q;
   return Math.tan(Math.acos(clamp(num(gc.pfReq) || 1, 0.01, 1)));
 }
-/* Required Q at the POI in p.u. of Pmax, at output level Ppu (0..1) */
-function gcQreqPu(gc, Ppu) {
+/* Required Q at the POI in p.u. of Pmax, at output level Ppu (0..1).
+   dir: "lag" = export/production (overexcited), "lead" = absorb/consumption.
+   With leadRelief (G99 Fig. 13.14), the lead-side boundary ramps from
+   0.12·Pmax at 20% output to the full value at 50% (DNO-discretion triangle). */
+function gcQreqPu(gc, Ppu, dir = "lag") {
   const pMin = num(gc.pMin) / 100, pFull = Math.max(num(gc.pFull) / 100, num(gc.pMin) / 100);
   if (Ppu < pMin - 1e-9) return 0;
   const qMax = gcQmaxPu(gc);
+  if (dir === "lead" && gc.leadRelief) {
+    const pHi = 0.5, qLo = qMax * (0.12 / 0.33);
+    if (Ppu >= pHi - 1e-9) return qMax;
+    if (pHi <= pMin + 1e-9) return qMax;
+    return qLo + (qMax - qLo) * (Ppu - pMin) / (pHi - pMin);
+  }
   if (Ppu >= pFull - 1e-9 || pFull <= pMin + 1e-9) return qMax;
   return qMax * (Ppu - pMin) / (pFull - pMin);
 }
-/* 0..1 factor over voltage: 1 inside the full band, tapering to 0 at the zero limits */
-function gcVqFactor(gc, V) {
-  const zl = num(gc.vZeroLo), zh = num(gc.vZeroHi), fl = num(gc.vFullLo), fh = num(gc.vFullHi);
+/* 0..1 factor over voltage. Symmetric codes: 1 inside the full band, tapering
+   to 0 at the zero limits. Asymmetric (G99 Fig. 13.13 hexagon): lagging Q
+   required at low voltage (full vFullLo–1.00, zero at vFullHi), leading Q at
+   high voltage (full 1.00–vFullHi, zero at vFullLo). */
+function gcVqFactor(gc, V, dir = "lag") {
+  const fl = num(gc.vFullLo), fh = num(gc.vFullHi);
+  if (gc.vqAsym) {
+    if (V < fl - 1e-9 || V > fh + 1e-9) return 0;
+    if (dir === "lag") return V <= 1 ? 1 : (fh > 1 ? (fh - V) / (fh - 1) : 1);
+    return V >= 1 ? 1 : (fl < 1 ? (V - fl) / (1 - fl) : 1);
+  }
+  const zl = num(gc.vZeroLo), zh = num(gc.vZeroHi);
   if (V <= zl || V >= zh) return 0;
   if (V < fl) return fl > zl ? (V - zl) / (fl - zl) : 1;
   if (V > fh) return zh > fh ? (zh - V) / (zh - fh) : 1;
   return 1;
 }
-/* Plant Q capability deliverable at the POI (net of transformer consumption)
-   at output level Ppu, nominal voltage. */
-function plantCapPOI(s, r, Ppu) {
-  if (r.N <= 0) return { q: r.Q_capbank - r.Q_xmer, allowed: true };
-  const p_d = Ppu * (r.P + r.lossSum) * 1000 / r.N;      // kW per inverter
-  let q_i, allowed;
+/* Per-inverter reactive capability (kVAr) at active dispatch p_d (kW) and
+   grid voltage V, using whichever inverter model is active. */
+function invQCapAt(s, r, p_d, V) {
+  const pPu = r.S_inv > 0 ? p_d / r.S_inv : 0;
   if (r.pqActive) {
-    const c = qCapAt(s.pq, 1.0, r.S_inv > 0 ? p_d / r.S_inv : 0);
-    allowed = c.allowed;
-    q_i = c.allowed ? c.pct / 100 * r.S_inv : 0;
-  } else if (r.qOvr) {
-    allowed = p_d <= r.S_eff + 1e-9;
-    q_i = allowed ? Math.min(num(s.invQOverride), Math.sqrt(Math.max(0, r.S_eff ** 2 - p_d ** 2))) : 0;
-  } else {
-    allowed = p_d <= r.S_inv + 1e-9;
-    q_i = allowed ? Math.sqrt(Math.max(0, r.S_inv ** 2 - p_d ** 2)) : 0;
+    const c = qCapAt(s.pq, V, pPu);
+    return { q: c.allowed ? c.pct / 100 * r.S_inv : 0, allowed: c.allowed };
   }
-  return { q: r.N * q_i / 1000 + r.Q_capbank - r.Q_xmer, allowed };
+  const S_v = r.S_eff * Math.min(V, 1);
+  if (p_d > S_v + 1e-9) return { q: 0, allowed: false };
+  const circ = Math.sqrt(Math.max(0, S_v * S_v - p_d * p_d));
+  return { q: r.qOvr ? Math.min(num(s.invQOverride), circ) : circ, allowed: true };
 }
-/* Compliance sweep over the output range at nominal voltage */
+/* Plant Q capability at the POI at output level Ppu and voltage V.
+   The study convention: inverters dispatch the active power actually needed
+   (output + losses)/N — not the design-PF point — so partial output and
+   surplus inverters free reactive headroom. Export (lag): production plus
+   capacitor bank, net of transformer consumption. Absorption (lead):
+   inverter absorption plus transformer consumption (capacitor bank switched
+   out). Inverter capability is taken as symmetric. */
+function plantCapPOI(s, r, Ppu, V = 1.0) {
+  if (r.N <= 0) return { prod: r.Q_capbank - r.Q_xmer, abs: r.Q_xmer, allowed: true };
+  const p_d = Ppu * (r.P + r.lossSum) * 1000 / r.N;      // kW per inverter
+  const c = invQCapAt(s, r, p_d, V);
+  const qPlant = r.N * c.q / 1000;                       // MVAr produced/absorbed
+  return { prod: qPlant + r.Q_capbank - r.Q_xmer, abs: qPlant + r.Q_xmer, allowed: c.allowed };
+}
+/* Full compliance assessment: P-Q coverage at nominal voltage in both
+   directions, plus the G99-style corner points A/B/E/F on the V-Q envelope. */
 function gcCompliance(s, r) {
   const gc = s.gridCode;
   const pts = [];
   let worst = null, covered = true;
   for (let k = 0; k <= 100; k++) {
     const Ppu = k / 100;
-    const req = gcQreqPu(gc, Ppu) * r.P;                 // MVAr at POI
-    const cap = plantCapPOI(s, r, Ppu);
-    const capQ = Math.max(0, cap.q);
-    const short = req - capQ;
-    if (short > 1e-6) {
-      covered = false;
-      if (!worst || short > worst.short) worst = { Ppu, req, capQ, short };
+    const reqLag = gcQreqPu(gc, Ppu, "lag") * r.P;
+    const reqLead = gcQreqPu(gc, Ppu, "lead") * r.P;
+    const cap = plantCapPOI(s, r, Ppu, 1.0);
+    const prod = Math.max(0, cap.prod), abs = Math.max(0, cap.abs);
+    for (const [dir, req, capQ] of [["lag", reqLag, prod], ["lead", reqLead, abs]]) {
+      const short = req - capQ;
+      if (short > 1e-6) {
+        covered = false;
+        if (!worst || short > worst.short) worst = { Ppu, dir, req, capQ, short };
+      }
     }
-    pts.push({ Ppu, req, capQ, allowed: cap.allowed });
+    pts.push({ Ppu, reqLag, reqLead, prod, abs, allowed: cap.allowed });
   }
-  return { pts, covered, worst };
+  // corner points of the V-Q envelope at Registered Capacity (G99 Fig. 13.13)
+  const fl = num(gc.vFullLo), fh = num(gc.vFullHi);
+  const Qm = gcQreqPu(gc, 1, "lag") * r.P;
+  const QmLead = gcQreqPu(gc, 1, "lead") * r.P;
+  const cornerDefs = gc.vqAsym
+    ? [["A", fh, "lead"], ["B", 1.0, "lead"], ["E", fl, "lag"], ["F", 1.0, "lag"]]
+    : [["A", fh, "lead"], ["B", fl, "lead"], ["E", fl, "lag"], ["F", fh, "lag"]];
+  const corners = cornerDefs.map(([name, V, dir]) => {
+    const req = (dir === "lag" ? Qm : QmLead) * gcVqFactor(gc, V, dir);
+    const cap = plantCapPOI(s, r, 1.0, V);
+    const capQ = Math.max(0, dir === "lag" ? cap.prod : cap.abs);
+    const ok = cap.allowed && capQ >= req - 1e-6;
+    if (!ok) covered = false;
+    return { name, V, dir, req, capQ, allowed: cap.allowed, ok };
+  });
+  return { pts, corners, covered, worst };
 }
 
 /* ---------- calculation model ---------- */
@@ -1009,22 +1070,16 @@ function goalSeek(s) {
 function voltageSweep(s, r) {
   const levels = (Array.isArray(s.voltLevels) ? s.voltLevels : [])
     .map(num).filter(v => v > 0).sort((a, b) => a - b);
-  const pPu = r.S_inv > 0 ? r.p_inv / r.S_inv : 0;
+  // dispatch the active power actually needed to deliver the grid limit
+  const p_d = r.N > 0 ? (r.P + r.lossSum) * 1000 / r.N : 0; // kW per inverter
   return levels.map(V => {
-    let S_v, curtailed, q_v;
-    if (r.pqActive) {
-      const cap = qCapAt(s.pq, V, pPu);
-      curtailed = !cap.allowed;
-      q_v = curtailed ? 0 : cap.pct / 100 * r.S_inv;      // kVAr from the table
-      S_v = curtailed ? 0 : Math.hypot(r.p_inv, q_v);     // implied apparent power
-    } else {
-      S_v = r.S_eff * Math.min(V, 1);                     // kVA available
-      curtailed = S_v < r.p_inv - 1e-9;                   // can't even carry P
-      q_v = curtailed ? 0 : Math.min(r.q_inv, Math.sqrt(Math.max(0, S_v * S_v - r.p_inv * r.p_inv))); // kVAr
-    }
+    const c = r.N > 0 ? invQCapAt(s, r, p_d, V) : { q: 0, allowed: false };
+    const curtailed = !c.allowed;
+    const q_v = c.q;                                      // kVAr per inverter
+    const S_v = curtailed ? 0 : Math.hypot(p_d, q_v);     // implied apparent power
     const Q_plant = r.N * q_v / 1000 + r.Q_capbank;       // MVAr
     // requirement at this voltage: grid-code Q (tapered by V) plus transformer consumption
-    const req = gcQreqPu(s.gridCode, 1) * r.P * gcVqFactor(s.gridCode, V) + r.Q_xmer;
+    const req = gcQreqPu(s.gridCode, 1, "lag") * r.P * gcVqFactor(s.gridCode, V, "lag") + r.Q_xmer;
     const margin = Q_plant - req;
     return { V, S_v, q_v, Q_plant, req, margin, curtailed,
              ok: margin >= -1e-9 && !(curtailed && req > 1e-9) };
@@ -1367,50 +1422,156 @@ function drawGCPreviews() {
   }
 }
 
-function drawCompliance(r) {
-  const comp = gcCompliance(state, r);
+/* V-Q diagram at Registered Capacity — the signature curve of a G99 Type C
+   study: requirement polygon vs plant capability envelope, both Q directions. */
+function drawVQDiagram(r, comp) {
   const c = chartInks();
-  const svg = document.getElementById("compchart");
+  const svg = document.getElementById("vqDiag");
   svg.innerHTML = "";
-  const W = 360, H = 230, mL = 44, mR = 12, mT = 14, mB = 32;
-  const yMax = Math.max(...comp.pts.map(d => Math.max(d.req, d.capQ)), 0.1) * 1.15;
-  const x = Ppu => mL + Ppu * (W - mL - mR);
-  const y = q => H - mB - q / yMax * (H - mT - mB);
-  for (let i = 0; i <= 3; i++) {
-    const qv = yMax / 3 * i;
-    svg.append(svgEl("line", { x1: mL, y1: y(qv), x2: W - mR, y2: y(qv), stroke: c.grid, "stroke-width": 1 }));
-    svg.append(svgEl("text", { x: mL - 6, y: y(qv) + 3.5, "text-anchor": "end", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(qv, 0)));
+  const gc = state.gridCode;
+  const W = 760, H = 360, mL = 58, mR = 150, mT = 18, mB = 46;
+  const fl = num(gc.vFullLo), fh = num(gc.vFullHi), zl = num(gc.vZeroLo), zh = num(gc.vZeroHi);
+  const Qm = gcQreqPu(gc, 1, "lag") * r.P, QmL = gcQreqPu(gc, 1, "lead") * r.P;
+  const vLo = Math.min(gc.vqAsym ? fl : zl, 0.90) - 0.02;
+  const vHi = Math.max(gc.vqAsym ? fh : zh, 1.10) + 0.02;
+  // capability over the voltage range at full-output dispatch
+  const caps = [];
+  for (let v = vLo; v <= vHi + 1e-9; v += 0.005) {
+    const cap = plantCapPOI(state, r, 1.0, v);
+    if (cap.allowed) caps.push({ v, prod: cap.prod, abs: cap.abs });
   }
-  [0, 0.25, 0.5, 0.75, 1].forEach(pv => {
-    svg.append(svgEl("text", { x: x(pv), y: H - mB + 14, "text-anchor": "middle", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(pv * r.P, 0)));
+  const xMax = Math.max(Qm, QmL, ...caps.map(d => Math.max(d.prod, d.abs)), 1) * 1.12;
+  const x = q => mL + (q + xMax) / (2 * xMax) * (W - mL - mR);
+  const y = v => H - mB - (v - vLo) / (vHi - vLo) * (H - mT - mB);
+  // grid + axes
+  const vticks = [];
+  for (let v = Math.ceil(vLo * 20) / 20; v <= vHi + 1e-9; v += 0.05) vticks.push(Math.round(v * 100) / 100);
+  vticks.forEach(v => {
+    svg.append(svgEl("line", { x1: mL, y1: y(v), x2: W - mR, y2: y(v), stroke: c.grid, "stroke-width": 1 }));
+    svg.append(svgEl("text", { x: mL - 8, y: y(v) + 3.5, "text-anchor": "end", fill: c.muted, "font-size": 10, "font-family": MONO }, v.toFixed(2)));
   });
-  svg.append(svgEl("text", { x: W - mR, y: H - 4, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "P at POI (MW)"));
-  svg.append(svgEl("text", { x: mL - 6, y: mT - 2, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "MVAr"));
-  // shortfall shading where requirement exceeds capability
-  let region = null;
-  const regions = [];
-  comp.pts.forEach(d => {
-    if (d.req > d.capQ + 1e-6) { (region ??= []).push(d); }
-    else if (region) { regions.push(region); region = null; }
+  const xstep = xMax > 40 ? 20 : xMax > 16 ? 10 : 5;
+  for (let q = 0; q <= xMax; q += xstep) {
+    for (const sgn of q === 0 ? [1] : [1, -1]) {
+      svg.append(svgEl("text", { x: x(sgn * q), y: H - mB + 15, "text-anchor": "middle", fill: c.muted, "font-size": 10, "font-family": MONO }, fmt(sgn * q, 0)));
+    }
+  }
+  svg.append(svgEl("line", { x1: x(0), y1: mT, x2: x(0), y2: H - mB, stroke: c.grid, "stroke-width": 1.25 }));
+  svg.append(svgEl("line", { x1: mL, y1: H - mB, x2: W - mR, y2: H - mB, stroke: c.muted, "stroke-width": 1 }));
+  svg.append(svgEl("text", { x: mL, y: H - 8, fill: c.muted, "font-size": 10 }, "◀ Consumption (lead)"));
+  svg.append(svgEl("text", { x: W - mR, y: H - 8, "text-anchor": "end", fill: c.muted, "font-size": 10 }, "Production (lag) ▶"));
+  svg.append(svgEl("text", { x: W - mR, y: H - 22, "text-anchor": "end", fill: c.muted, "font-size": 10 }, "Q at CP (MVAr)"));
+  svg.append(svgEl("text", { x: mL - 8, y: mT - 6, "text-anchor": "end", fill: c.muted, "font-size": 10 }, "V (p.u.)"));
+  // requirement polygon
+  const reqPts = gc.vqAsym
+    ? [[0, fl], [Qm, fl], [Qm, 1], [0, fh], [-QmL, fh], [-QmL, 1]]
+    : [[0, zl], [Qm, fl], [Qm, fh], [0, zh], [-QmL, fh], [-QmL, fl]];
+  const reqD = reqPts.map(([q, v], i) => `${i ? "L" : "M"} ${x(q).toFixed(1)} ${y(v).toFixed(1)}`).join(" ") + " Z";
+  svg.append(svgEl("path", { d: reqD, fill: "none", stroke: c.ink, "stroke-width": 1.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
+  // capability envelope (closed loop)
+  if (caps.length > 1) {
+    const right = caps.map((d, i) => `${i ? "L" : "M"} ${x(d.prod).toFixed(1)} ${y(d.v).toFixed(1)}`).join(" ");
+    const left = [...caps].reverse().map(d => `L ${x(-d.abs).toFixed(1)} ${y(d.v).toFixed(1)}`).join(" ");
+    svg.append(svgEl("path", { d: `${right} ${left} Z`, fill: c.p, "fill-opacity": 0.06, stroke: c.p, "stroke-width": 2, "stroke-linejoin": "round" }));
+  }
+  // corner point markers
+  comp.corners.forEach(pt => {
+    const qx = pt.dir === "lag" ? pt.req : -pt.req;
+    svg.append(svgEl("circle", { cx: x(qx), cy: y(pt.V), r: 4, fill: pt.ok ? c.p : c.crit, stroke: c.surface, "stroke-width": 1.5 }));
+    svg.append(svgEl("text", { x: x(qx) + (pt.dir === "lag" ? 8 : -8), y: y(pt.V) - 6, "text-anchor": pt.dir === "lag" ? "start" : "end", fill: c.muted, "font-size": 10, "font-weight": 600, "font-family": MONO }, pt.name));
   });
-  if (region) regions.push(region);
-  regions.forEach(seg => {
-    const up = seg.map((d, i) => `${i ? "L" : "M"} ${x(d.Ppu).toFixed(1)} ${y(d.req).toFixed(1)}`).join(" ");
-    const dn = [...seg].reverse().map(d => `L ${x(d.Ppu).toFixed(1)} ${y(d.capQ).toFixed(1)}`).join(" ");
-    svg.append(svgEl("path", { d: `${up} ${dn} Z`, fill: c.crit, opacity: 0.14, stroke: "none" }));
+  // legend
+  const ly = mT + 12;
+  svg.append(svgEl("line", { x1: W - mR + 14, y1: ly - 4, x2: W - mR + 34, y2: ly - 4, stroke: c.ink, "stroke-width": 1.5, "stroke-dasharray": "6 4" }));
+  svg.append(svgEl("text", { x: W - mR + 40, y: ly, fill: c.muted, "font-size": 10.5 }, "requirement"));
+  svg.append(svgEl("line", { x1: W - mR + 14, y1: ly + 16, x2: W - mR + 34, y2: ly + 16, stroke: c.p, "stroke-width": 2 }));
+  svg.append(svgEl("text", { x: W - mR + 40, y: ly + 20, fill: c.muted, "font-size": 10.5 }, "plant capability"));
+}
+
+/* P-Q diagram at nominal voltage: requirement envelope (with lead relief and
+   the ±5% stub below the minimum-output threshold) vs plant capability. */
+function drawPQDiagram(r, comp) {
+  const c = chartInks();
+  const svg = document.getElementById("pqDiag");
+  svg.innerHTML = "";
+  const gc = state.gridCode;
+  const W = 760, H = 400, mL = 58, mR = 150, mT = 18, mB = 46;
+  const RC = r.P;
+  const pMin = num(gc.pMin) / 100;
+  const xMax = Math.max(...comp.pts.map(d => Math.max(d.reqLag, d.reqLead, d.prod, d.abs)), 1) * 1.12;
+  const yMax = RC * 1.1;
+  const x = q => mL + (q + xMax) / (2 * xMax) * (W - mL - mR);
+  const y = p => H - mB - p / yMax * (H - mT - mB);
+  for (let i = 0; i <= 4; i++) {
+    const pv = yMax / 4 * i;
+    svg.append(svgEl("line", { x1: mL, y1: y(pv), x2: W - mR, y2: y(pv), stroke: c.grid, "stroke-width": 1 }));
+    svg.append(svgEl("text", { x: mL - 8, y: y(pv) + 3.5, "text-anchor": "end", fill: c.muted, "font-size": 10, "font-family": MONO }, fmt(pv, 0)));
+  }
+  const xstep = xMax > 40 ? 20 : xMax > 16 ? 10 : 5;
+  for (let q = 0; q <= xMax; q += xstep) {
+    for (const sgn of q === 0 ? [1] : [1, -1]) {
+      svg.append(svgEl("text", { x: x(sgn * q), y: H - mB + 15, "text-anchor": "middle", fill: c.muted, "font-size": 10, "font-family": MONO }, fmt(sgn * q, 0)));
+    }
+  }
+  svg.append(svgEl("line", { x1: x(0), y1: mT, x2: x(0), y2: H - mB, stroke: c.grid, "stroke-width": 1.25 }));
+  svg.append(svgEl("line", { x1: mL, y1: H - mB, x2: W - mR, y2: H - mB, stroke: c.muted, "stroke-width": 1 }));
+  svg.append(svgEl("text", { x: mL, y: H - 8, fill: c.muted, "font-size": 10 }, "◀ Consumption (lead)"));
+  svg.append(svgEl("text", { x: W - mR, y: H - 8, "text-anchor": "end", fill: c.muted, "font-size": 10 }, "Production (lag) ▶"));
+  svg.append(svgEl("text", { x: W - mR, y: H - 22, "text-anchor": "end", fill: c.muted, "font-size": 10 }, "Q at CP (MVAr)"));
+  svg.append(svgEl("text", { x: mL - 8, y: mT - 6, "text-anchor": "end", fill: c.muted, "font-size": 10 }, "P (MW)"));
+  // MSOL line at the minimum-output threshold
+  if (pMin > 0) {
+    svg.append(svgEl("line", { x1: mL, y1: y(pMin * RC), x2: W - mR, y2: y(pMin * RC), stroke: c.muted, "stroke-width": 1, "stroke-dasharray": "3 4" }));
+    svg.append(svgEl("text", { x: W - mR - 6, y: y(pMin * RC) - 5, "text-anchor": "end", fill: c.muted, "font-size": 9.5, "font-family": MONO }, `MSOL ${fmt(pMin * RC, 1)} MW`));
+  }
+  // requirement envelope: right boundary up (lag), top, left boundary down (lead)
+  const kMin = Math.max(0, Math.round(pMin * 100));
+  const above = comp.pts.slice(kMin);
+  const reqPath =
+    above.map((d, i) => `${i ? "L" : "M"} ${x(d.reqLag).toFixed(1)} ${y(d.Ppu * RC).toFixed(1)}`).join(" ") +
+    " " + [...above].reverse().map(d => `L ${x(-d.reqLead).toFixed(1)} ${y(d.Ppu * RC).toFixed(1)}`).join(" ") + " Z";
+  svg.append(svgEl("path", { d: reqPath, fill: "none", stroke: c.ink, "stroke-width": 1.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
+  // ±5% stub below the threshold (tolerance band, no voltage regulation)
+  if (pMin > 0) {
+    const stub = 0.05 * RC;
+    for (const sgn of [1, -1]) {
+      svg.append(svgEl("line", { x1: x(sgn * stub), y1: y(0), x2: x(sgn * stub), y2: y(pMin * RC), stroke: c.ink, "stroke-width": 1, "stroke-dasharray": "2 3" }));
+    }
+  }
+  // capability loop
+  const capPts = comp.pts.filter(d => d.allowed);
+  if (capPts.length > 1) {
+    const right = capPts.map((d, i) => `${i ? "L" : "M"} ${x(d.prod).toFixed(1)} ${y(d.Ppu * RC).toFixed(1)}`).join(" ");
+    const left = [...capPts].reverse().map(d => `L ${x(-d.abs).toFixed(1)} ${y(d.Ppu * RC).toFixed(1)}`).join(" ");
+    svg.append(svgEl("path", { d: `${right} ${left} Z`, fill: c.p, "fill-opacity": 0.06, stroke: c.p, "stroke-width": 2, "stroke-linejoin": "round" }));
+  }
+  // legend
+  const ly = mT + 12;
+  svg.append(svgEl("line", { x1: W - mR + 14, y1: ly - 4, x2: W - mR + 34, y2: ly - 4, stroke: c.ink, "stroke-width": 1.5, "stroke-dasharray": "6 4" }));
+  svg.append(svgEl("text", { x: W - mR + 40, y: ly, fill: c.muted, "font-size": 10.5 }, "requirement"));
+  svg.append(svgEl("line", { x1: W - mR + 14, y1: ly + 16, x2: W - mR + 34, y2: ly + 16, stroke: c.p, "stroke-width": 2 }));
+  svg.append(svgEl("text", { x: W - mR + 40, y: ly + 20, fill: c.muted, "font-size": 10.5 }, "plant capability"));
+}
+
+function renderCornerTable(comp) {
+  const tb = document.querySelector("#cornerTable tbody");
+  tb.innerHTML = "";
+  comp.corners.forEach(pt => {
+    const tr = document.createElement("tr");
+    const status = !pt.allowed
+      ? `<span class="vstatus warn">⚠ P curtailed</span>`
+      : pt.ok
+        ? `<span class="vstatus ok">✓ pass</span>`
+        : `<span class="vstatus bad">✕ short ${fmt(pt.req - pt.capQ, 1)}</span>`;
+    tr.innerHTML = `
+      <td>${pt.name}</td>
+      <td>${fmt(pt.V, 2)}</td>
+      <td style="font-family:var(--sans)" title="${pt.dir === "lag" ? "Production / export (overexcited)" : "Consumption / absorb (underexcited)"}">${pt.dir === "lag" ? "Lag" : "Lead"}</td>
+      <td>${fmt(pt.req, 1)}</td>
+      <td>${fmt(pt.capQ, 1)}</td>
+      <td>${status}</td>`;
+    tb.append(tr);
   });
-  // requirement (dashed ink) and capability (blue)
-  const reqD = comp.pts.map((d, i) => `${i ? "L" : "M"} ${x(d.Ppu).toFixed(1)} ${y(d.req).toFixed(1)}`).join(" ");
-  svg.append(svgEl("path", { d: reqD, fill: "none", stroke: c.ink, "stroke-width": 1.5, "stroke-dasharray": "5 4", "stroke-linejoin": "round" }));
-  const capD = comp.pts.map((d, i) => `${i ? "L" : "M"} ${x(d.Ppu).toFixed(1)} ${y(d.capQ).toFixed(1)}`).join(" ");
-  svg.append(svgEl("path", { d: capD, fill: "none", stroke: c.p, "stroke-width": 2, "stroke-linejoin": "round" }));
-  // direct labels
-  const lastReq = comp.pts[comp.pts.length - 1], midCap = comp.pts[Math.round(comp.pts.length * 0.45)];
-  svg.append(svgEl("text", { x: x(0.99), y: y(lastReq.req) + (lastReq.capQ > lastReq.req ? 14 : -6), "text-anchor": "end", fill: c.ink, "font-size": 9.5, "font-weight": 600, "font-family": MONO }, "required"));
-  svg.append(svgEl("text", { x: x(midCap.Ppu), y: y(midCap.capQ) - 7, "text-anchor": "middle", fill: c.p, "font-size": 9.5, "font-weight": 600, "font-family": MONO }, "capability"));
-  // operating level marker at full output
-  svg.append(svgEl("circle", { cx: x(1), cy: y(comp.pts[100].capQ), r: 4, fill: c.p, stroke: c.surface, "stroke-width": 2 }));
-  return comp;
 }
 
 /* ---------- voltage capability chart & table ---------- */
@@ -1552,20 +1713,21 @@ function update() {
   drawTriangle(r);
 
   drawGCPreviews();
-  const comp = drawCompliance(r);
+  const comp = gcCompliance(state, r);
+  drawVQDiagram(r, comp);
+  drawPQDiagram(r, comp);
+  renderCornerTable(comp);
   const compCheck = document.getElementById("compCheck");
   const compIcon = document.getElementById("compIcon");
   const compMsg = document.getElementById("compMsg");
   compCheck.className = "check " + (comp.covered ? "good" : "crit");
   compIcon.textContent = comp.covered ? "✓" : "✕";
+  const failedCorners = comp.corners.filter(pt => !pt.ok).map(pt => pt.name);
   compMsg.innerHTML = comp.covered
-    ? `The plant covers the grid code's reactive requirement across the whole output range (cos φ ${fmt(num(state.gridCode.pfReq), 3)} at the POI).`
-    : `Requirement not covered: worst shortfall <b>${fmt(comp.worst.short)} MVAr</b> at <b>${fmt(comp.worst.Ppu * 100, 0)}%</b> output (needs ${fmt(comp.worst.req)}, plant can deliver ${fmt(comp.worst.capQ)}). Add a capacitor bank, more inverters, or a lower inverter PF.`;
-  const full = comp.pts[100];
-  document.getElementById("compReq").textContent = fmt(full.req) + " MVAr";
-  document.getElementById("compCap").textContent = fmt(full.capQ) + " MVAr";
-  const worstMargin = Math.min(...comp.pts.map(d => d.capQ - d.req));
-  document.getElementById("compWorst").textContent = (worstMargin >= 0 ? "+" : "") + fmt(worstMargin) + " MVAr";
+    ? `Compliant: the plant covers the P–Q envelope across the output range and all V–Q corner points at Registered Capacity (Q = ±${fmt(gcQreqPu(state.gridCode, 1, "lag") * r.P, 1)} MVAr at the CP).`
+    : (comp.worst
+        ? `Not compliant: worst P–Q shortfall <b>${fmt(comp.worst.short)} MVAr</b> (${comp.worst.dir === "lag" ? "export" : "absorb"}) at <b>${fmt(comp.worst.Ppu * 100, 0)}%</b> output${failedCorners.length ? `; V–Q corner point${failedCorners.length > 1 ? "s" : ""} ${failedCorners.join(", ")} also fail` : ""}. Add a capacitor bank, more inverters, or a lower inverter PF.`
+        : `Not compliant: V–Q corner point${failedCorners.length > 1 ? "s" : ""} <b>${failedCorners.join(", ")}</b> fail at Registered Capacity — see the Step 7 diagrams.`);
 
   drawPQ(r);
   const qOp = r.N > 0 ? r.Q_for_inv * 1000 / r.N : 0;
