@@ -439,8 +439,8 @@
       <div class="note" id="goalSeekNote" hidden></div>
       <div class="note" id="qOvrNote" hidden></div>
       <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center">
-        <button id="btnPdf" type="button">📄 Read capability from datasheet (PDF)</button>
-        <input id="pdfFile" type="file" accept="application/pdf" hidden>
+        <button id="btnPdf" type="button">📄 Read from datasheet (PDF / Excel)</button>
+        <input id="pdfFile" type="file" accept=".pdf,.xlsx,.xlsm,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
       </div>
       <div class="note" id="pdfResult" hidden></div>
       <div class="derived">
@@ -1156,13 +1156,7 @@ async function extractPdfText(buf) {
   return parts.join(" ");
 }
 
-function scanKvarCandidates(text) {
-  const found = new Map();
-  // "213 kVAr", "213.5kvar", "213 k var", and "kVAr: 213"
-  const res = [
-    /(\d{1,4}(?:[.,]\d{1,2})?)\s*k\s?var/gi,
-    /kvar\s*[:=]?\s*(\d{1,4}(?:[.,]\d{1,2})?)/gi,
-  ];
+function scanUnitValues(text, res, found) {
   for (const re of res) {
     let m;
     while ((m = re.exec(text)) !== null) {
@@ -1173,30 +1167,139 @@ function scanKvarCandidates(text) {
       }
     }
   }
-  return [...found.entries()].map(([value, context]) => ({ value, context }));
+}
+/* Finds "213 kVAr" / "kvar: 213" (reactive) and "363 kVA" / "kVA = 363"
+   (apparent — negative lookahead so kVAr never matches as kVA). */
+function scanCapabilities(text) {
+  const q = new Map(), s = new Map();
+  scanUnitValues(text, [
+    /(\d{1,4}(?:[.,]\d{1,2})?)\s*k\s?var/gi,
+    /kvar\s*[:=]?\s*(\d{1,4}(?:[.,]\d{1,2})?)/gi,
+  ], q);
+  scanUnitValues(text, [
+    /(\d{1,4}(?:[.,]\d{1,2})?)\s*k\s?va(?!r)/gi,
+    /kva(?!r)\s*[:=]?\s*(\d{1,4}(?:[.,]\d{1,2})?)/gi,
+  ], s);
+  const toArr = map => [...map.entries()].map(([value, context]) => ({ value, context }));
+  return { q: toArr(q), s: toArr(s) };
+}
+
+/* ---------- Excel (.xlsx) parsing: minimal ZIP + SpreadsheetML reader ---------- */
+async function unzipEntries(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65558); i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("not a zip archive");
+  const count = dv.getUint16(eocd + 10, true);
+  let off = dv.getUint32(eocd + 16, true);
+  const files = {};
+  for (let i = 0; i < count && dv.getUint32(off, true) === 0x02014b50; i++) {
+    const method = dv.getUint16(off + 10, true);
+    const csize = dv.getUint32(off + 20, true);
+    const nameLen = dv.getUint16(off + 28, true);
+    const extraLen = dv.getUint16(off + 30, true);
+    const cmtLen = dv.getUint16(off + 32, true);
+    const lho = dv.getUint32(off + 42, true);
+    const name = new TextDecoder().decode(u8.subarray(off + 46, off + 46 + nameLen));
+    files[name] = { method, csize, lho };
+    off += 46 + nameLen + extraLen + cmtLen;
+  }
+  return async name => {
+    const f = files[name];
+    if (!f) return null;
+    const nl = dv.getUint16(f.lho + 26, true), el = dv.getUint16(f.lho + 28, true);
+    const data = u8.subarray(f.lho + 30 + nl + el, f.lho + 30 + nl + el + f.csize);
+    if (f.method === 0) return new TextDecoder().decode(data);
+    const out = await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+    return new TextDecoder().decode(out);
+  };
+}
+
+/* Returns one text line per spreadsheet row: "label | 363 | kVA" */
+async function extractXlsxRows(buf) {
+  const read = await unzipEntries(buf);
+  const parse = xml => new DOMParser().parseFromString(xml, "application/xml");
+  const shared = [];
+  const ssXml = await read("xl/sharedStrings.xml");
+  if (ssXml) {
+    for (const si of parse(ssXml).getElementsByTagName("si")) {
+      shared.push([...si.getElementsByTagName("t")].map(t => t.textContent).join(""));
+    }
+  }
+  const lines = [];
+  for (let i = 1; i <= 30; i++) {
+    const xml = await read(`xl/worksheets/sheet${i}.xml`);
+    if (!xml) break;
+    for (const row of parse(xml).getElementsByTagName("row")) {
+      const cells = [];
+      for (const c of row.getElementsByTagName("c")) {
+        const t = c.getAttribute("t");
+        const v = c.getElementsByTagName("v")[0]?.textContent;
+        const inl = c.getElementsByTagName("is")[0];
+        if (t === "s" && v != null) cells.push(shared[parseInt(v, 10)] ?? "");
+        else if (t === "inlineStr" && inl) cells.push([...inl.getElementsByTagName("t")].map(x => x.textContent).join(""));
+        else if (v != null) cells.push(v);
+      }
+      const line = cells.map(x => String(x).trim()).filter(Boolean).join(" | ");
+      if (line) lines.push(line);
+    }
+  }
+  return lines;
+}
+
+/* Unit-based scan per row, plus label-based fallback for rows without units */
+function scanXlsx(lines) {
+  const q = new Map(), s = new Map();
+  for (const line of lines) {
+    const hit = scanCapabilities(line);
+    hit.q.forEach(c => { if (!q.has(c.value)) q.set(c.value, line); });
+    hit.s.forEach(c => { if (!s.has(c.value)) s.set(c.value, line); });
+    if (!hit.q.length && !hit.s.length) {
+      const nums = [...line.matchAll(/(?:^|\| )\s*(\d{1,6}(?:[.,]\d{1,3})?)\s*(?=\||$)/g)]
+        .map(m => parseFloat(m[1].replace(",", "."))).filter(v => v > 0 && v < 100000);
+      if (nums.length) {
+        if (/reactive|q\s*max/i.test(line)) nums.forEach(v => { if (!q.has(v)) q.set(v, line); });
+        else if (/apparent|capacit|kva rating/i.test(line)) nums.forEach(v => { if (!s.has(v)) s.set(v, line); });
+      }
+    }
+  }
+  const toArr = map => [...map.entries()].map(([value, context]) => ({ value, context }));
+  return { q: toArr(q), s: toArr(s) };
 }
 
 function renderDatasheet() {
   const box = document.getElementById("pdfResult");
-  const ds = state.datasheet;
+  let ds = state.datasheet;
+  if (ds && ds.candidates && !ds.q) ds = state.datasheet = { name: ds.name, q: ds.candidates, s: [] };
   if (!ds) { box.hidden = true; return; }
   box.hidden = false;
-  box.className = "note" + (ds.candidates.length ? " accent" : "");
-  if (!ds.candidates.length) {
-    box.innerHTML = `<b>${escapeHtml(ds.name)}</b>: no kVAr figure could be read from this PDF
-      (scanned or subset-font datasheets often aren't machine-readable). Open the datasheet,
-      find the reactive power rating, and type it into <em>Reactive capability / inverter</em>.
+  const qc = ds.q || [], sc = ds.s || [];
+  box.className = "note" + (qc.length || sc.length ? " accent" : "");
+  if (!qc.length && !sc.length) {
+    box.innerHTML = `<b>${escapeHtml(ds.name)}</b>: no kVA or kVAr figure could be read from this file
+      (scanned or image-based documents aren't machine-readable, and legacy .xls needs saving
+      as .xlsx). Open it, find the rating, and type it into the fields above.
       <button type="button" id="dsClear" style="margin-left:8px">Remove</button>`;
   } else {
-    const chips = ds.candidates.slice(0, 8).map((c, i) =>
-      `<button type="button" class="ds-apply" data-v="${c.value}" title="${escapeHtml(c.context)}"
-        style="font-family:var(--mono)">${fmt(c.value, c.value % 1 ? 1 : 0)} kVAr</button>`).join(" ");
-    box.innerHTML = `<b>${escapeHtml(ds.name)}</b> — kVAr figures found (hover for context, click to apply):<br>
-      <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-top:6px">${chips}</span>
-      <button type="button" id="dsClear" style="margin-left:8px">Remove</button>`;
-    box.querySelectorAll(".ds-apply").forEach(b => b.addEventListener("click", () => {
+    const chipRow = (label, list, cls, unit) => list.length ? `<div style="margin-top:6px">${label}:
+      <span style="display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:4px">${
+        list.slice(0, 8).map(c => `<button type="button" class="${cls}" data-v="${c.value}"
+          title="${escapeHtml(c.context)}" style="font-family:var(--mono)">${fmt(c.value, c.value % 1 ? 1 : 0)} ${unit}</button>`).join("")
+      }</span></div>` : "";
+    box.innerHTML = `<b>${escapeHtml(ds.name)}</b> — figures found (hover for context, click to apply):
+      ${chipRow("Apparent power", sc, "ds-apply-s", "kVA")}
+      ${chipRow("Reactive capability", qc, "ds-apply-q", "kVAr")}
+      <div style="margin-top:8px"><button type="button" id="dsClear">Remove</button></div>`;
+    box.querySelectorAll(".ds-apply-q").forEach(b => b.addEventListener("click", () => {
       state.invQOverride = parseFloat(b.dataset.v);
       document.getElementById("invQ").value = state.invQOverride;
+      update();
+    }));
+    box.querySelectorAll(".ds-apply-s").forEach(b => b.addEventListener("click", () => {
+      state.invKVA = parseFloat(b.dataset.v);
+      document.getElementById("invKVA").value = state.invKVA;
       update();
     }));
   }
@@ -1213,10 +1316,18 @@ document.getElementById("pdfFile").addEventListener("change", async e => {
   box.className = "note";
   box.textContent = `Reading ${f.name}…`;
   try {
-    const text = await extractPdfText(await f.arrayBuffer());
-    state.datasheet = { name: f.name, candidates: scanKvarCandidates(text) };
+    const buf = await f.arrayBuffer();
+    let cand;
+    if (/\.xls[xm]$/i.test(f.name)) {
+      cand = scanXlsx(await extractXlsxRows(buf));
+    } else if (/\.xls$/i.test(f.name)) {
+      cand = { q: [], s: [] }; // legacy binary .xls isn't supported — save as .xlsx
+    } else {
+      cand = scanCapabilities(await extractPdfText(buf));
+    }
+    state.datasheet = { name: f.name, q: cand.q, s: cand.s };
   } catch (err) {
-    state.datasheet = { name: f.name, candidates: [] };
+    state.datasheet = { name: f.name, q: [], s: [] };
   }
   renderDatasheet();
   save();

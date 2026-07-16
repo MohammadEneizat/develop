@@ -47,10 +47,12 @@ apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
 - **Datasheet reactive capability** — leave the *Reactive capability /
   inverter* field blank to derive it from apparent power and power factor
   (√(S² − P²), the worksheet's formula), or enter the manufacturer's kVAr
-  figure directly. A **PDF import** reads an inverter datasheet in the browser
-  (FlateDecode text extraction, no external services), finds kVAr figures, and
-  lets you apply one with a click — with a graceful fallback to manual entry
-  for scanned or non-extractable PDFs. If the stated Q exceeds √(S² − P²), the
+  figure directly. A **datasheet import (PDF or Excel)** reads the file in the
+  browser — PDF via FlateDecode text extraction, .xlsx via a minimal ZIP +
+  SpreadsheetML reader, no external services — finds kVA (apparent power) and
+  kVAr (reactive capability) figures by unit and by row label, and lets you
+  apply each with a click, with a graceful fallback to manual entry for
+  scanned or non-extractable files. If the stated Q exceeds √(S² − P²), the
   app warns and assumes an effective apparent limit for the voltage sweep.
 - **Controllable inverter count** — leave the count blank to auto-size (the
   count that meets both the reactive demand and the delivery requirement at
