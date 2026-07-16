@@ -36,6 +36,17 @@ apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
 
 ## Improvements over the spreadsheet
 
+- **Grid code requirements & compliance** — select a grid code in Step 1
+  (typical presets or Custom): required PF at the POI, P–Q envelope shape
+  (rectangular or Q ∝ P), minimum output threshold, and the V–Q voltage band
+  with tapers. The app draws the requirement's P–Q envelope and V–Q profile,
+  overlays the V-dependent requirement on the voltage sweep (replacing the
+  flat demand line), and adds a **Grid code compliance** chart in the results:
+  plant reactive capability at the POI (net of transformer consumption,
+  evaluated at the true per-inverter dispatch for each output level) against
+  the requirement across 0–100 % output, with shortfall shading and a
+  covered/not-covered verdict.
+
 - **Live recalculation** — every result updates as you type.
 - **Built-in Goal Seek** — replaces Excel's manual *Data ▸ What-If Analysis ▸
   Goal Seek* step. It solves analytically for the minimum inverter count that

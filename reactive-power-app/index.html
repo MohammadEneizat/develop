@@ -391,6 +391,53 @@
         <div class="chip"><span class="k">MVA rating of plant</span><span class="v" id="outMVA">—<small>MVA</small></span></div>
         <div class="chip"><span class="k">MVAr demand (grid PF)</span><span class="v" id="outQGrid">—<small>MVAr</small></span></div>
       </div>
+
+      <h3 style="margin:18px 0 4px; font-size:13.5px">Grid code — reactive power requirement</h3>
+      <p class="sub">Pick a grid code (or Custom) to define what the plant must provide at the point of interconnection: the P–Q envelope (how much Q at each output level) and the V–Q profile (over which voltage band the full Q applies, tapering to zero outside it). Presets are typical values — always confirm against your interconnection agreement.</p>
+      <div class="fields">
+        <div class="field" style="grid-column: 1 / -1">
+          <label for="gcPreset">Grid code</label>
+          <div class="inwrap"><select id="gcPreset">
+            <option value="pf95rect">Fixed PF 0.95 lead/lag — full Q band (typical)</option>
+            <option value="pf95tri">Fixed PF 0.95 lead/lag — Q ∝ P (triangular)</option>
+            <option value="pf90rect">Fixed PF 0.90 lead/lag — full Q band (demanding)</option>
+            <option value="custom">Custom</option>
+          </select></div>
+        </div>
+        <div class="field">
+          <label for="gcPf">Required PF at POI</label>
+          <div class="inwrap"><input id="gcPf" type="number" step="0.001" min="0.5" max="1"><span class="unit">cos&nbsp;φ</span></div>
+        </div>
+        <div class="field">
+          <label for="gcShape">P–Q envelope shape</label>
+          <div class="inwrap"><select id="gcShape">
+            <option value="rect">Rectangular (full Q above min output)</option>
+            <option value="tri">Triangular (Q ∝ P)</option>
+          </select></div>
+        </div>
+        <div class="field">
+          <label for="gcPmin">Min output for requirement</label>
+          <div class="inwrap"><input id="gcPmin" type="number" step="1" min="0" max="100"><span class="unit">% P<sub>max</sub></span></div>
+        </div>
+        <div class="field">
+          <label for="gcVfLo">Full-Q voltage band</label>
+          <div class="inwrap"><input id="gcVfLo" type="number" step="0.01" min="0.5" max="1.5" aria-label="Full-Q band lower voltage"><span class="unit">–</span><input id="gcVfHi" type="number" step="0.01" min="0.5" max="1.5" aria-label="Full-Q band upper voltage"><span class="unit">p.u.</span></div>
+        </div>
+        <div class="field">
+          <label for="gcVzLo">Zero-Q voltage limits</label>
+          <div class="inwrap"><input id="gcVzLo" type="number" step="0.01" min="0.5" max="1.5" aria-label="Zero-Q lower voltage"><span class="unit">–</span><input id="gcVzHi" type="number" step="0.01" min="0.5" max="1.5" aria-label="Zero-Q upper voltage"><span class="unit">p.u.</span></div>
+        </div>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:16px; margin-top:14px">
+        <figure style="flex:1 1 300px; min-width:280px">
+          <svg id="gcPQ" viewBox="0 0 360 190" role="img" aria-label="Grid code P-Q requirement envelope"></svg>
+          <figcaption>P–Q requirement at the POI (capacitive +, inductive −).</figcaption>
+        </figure>
+        <figure style="flex:1 1 300px; min-width:280px">
+          <svg id="gcVQ" viewBox="0 0 360 190" role="img" aria-label="Grid code V-Q requirement profile"></svg>
+          <figcaption>V–Q profile: required Q vs grid voltage (at full output).</figcaption>
+        </figure>
+      </div>
     </section>
 
     <!-- Step 2 -->
@@ -520,7 +567,7 @@
       <div class="rowscroll">
         <table class="vtable" id="vtable">
           <thead>
-            <tr><th>Voltage (p.u.)</th><th>S / inverter (kVA)</th><th>Q / inverter (kVAr)</th><th>Plant Q capability (MVAr)</th><th>Margin vs demand (MVAr)</th><th>Status</th></tr>
+            <tr><th>Voltage (p.u.)</th><th>S / inverter (kVA)</th><th>Q / inverter (kVAr)</th><th>Plant Q capability (MVAr)</th><th>Required (MVAr)</th><th>Margin (MVAr)</th><th>Status</th></tr>
           </thead>
           <tbody></tbody>
         </table>
@@ -567,6 +614,23 @@
     </section>
 
     <section class="card">
+      <h2>Grid code compliance</h2>
+      <div class="check" id="compCheck">
+        <span class="icon-mark" id="compIcon">•</span>
+        <div class="msg" id="compMsg">—</div>
+      </div>
+      <figure style="margin-top:12px">
+        <svg id="compchart" viewBox="0 0 360 230" role="img" aria-label="Plant reactive capability versus grid code requirement across the output range"></svg>
+        <figcaption>Q at the POI vs plant output, nominal voltage. Capacitive side shown; the inductive side is symmetric. Capability is net of transformer consumption.</figcaption>
+      </figure>
+      <div style="margin-top:10px">
+        <div class="kv"><span class="k">Required at full output</span><span class="v" id="compReq">—</span></div>
+        <div class="kv"><span class="k">Capability at full output</span><span class="v" id="compCap">—</span></div>
+        <div class="kv"><span class="k">Worst margin across output range</span><span class="v" id="compWorst">—</span></div>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Scenario</h2>
       <div class="actions">
         <button id="btnExport" type="button">Export JSON</button>
@@ -592,6 +656,7 @@ const DEFAULTS = {
   powerFactor: 0.95,
   pfSense: "Leading",
   xmerMargin: 10,
+  gridCode: { preset: "pf95rect", pfReq: 0.95, shape: "rect", pMin: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
   invKVA: 363,
   invPF: 0.918,
   capBank: 0,
@@ -636,6 +701,7 @@ function load() {
       if (s && Array.isArray(s.xmers) && Array.isArray(s.losses)) {
         if (!Array.isArray(s.voltLevels) || !s.voltLevels.length) s.voltLevels = [...DEFAULTS.voltLevels];
         if (!s.pq || !Array.isArray(s.pq.rows) || !Array.isArray(s.pq.pLevels)) s.pq = structuredClone(DEFAULTS.pq);
+        if (!s.gridCode || typeof s.gridCode.pfReq !== "number") s.gridCode = structuredClone(DEFAULTS.gridCode);
         delete s.datasheet;
         return s;
       }
@@ -690,6 +756,68 @@ function qCapAt(pq, vPu, pPu) {
 function pqIsActive(s) {
   return !!(s.pq && s.pq.use && Array.isArray(s.pq.rows) &&
             s.pq.rows.some(r => r.q.some(x => x != null && x !== "")));
+}
+
+/* ---------- grid code requirement ---------- */
+const GC_PRESETS = {
+  pf95rect: { pfReq: 0.95, shape: "rect", pMin: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
+  pf95tri:  { pfReq: 0.95, shape: "tri",  pMin: 10, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
+  pf90rect: { pfReq: 0.90, shape: "rect", pMin: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
+};
+function gcTanPhi(gc) {
+  return Math.tan(Math.acos(clamp(num(gc.pfReq) || 1, 0.01, 1)));
+}
+/* Required Q at the POI in p.u. of Pmax, at output level Ppu (0..1) */
+function gcQreqPu(gc, Ppu) {
+  if (Ppu < num(gc.pMin) / 100 - 1e-9) return 0;
+  const t = gcTanPhi(gc);
+  return gc.shape === "tri" ? t * Ppu : t;
+}
+/* 0..1 factor over voltage: 1 inside the full band, tapering to 0 at the zero limits */
+function gcVqFactor(gc, V) {
+  const zl = num(gc.vZeroLo), zh = num(gc.vZeroHi), fl = num(gc.vFullLo), fh = num(gc.vFullHi);
+  if (V <= zl || V >= zh) return 0;
+  if (V < fl) return fl > zl ? (V - zl) / (fl - zl) : 1;
+  if (V > fh) return zh > fh ? (zh - V) / (zh - fh) : 1;
+  return 1;
+}
+/* Plant Q capability deliverable at the POI (net of transformer consumption)
+   at output level Ppu, nominal voltage. */
+function plantCapPOI(s, r, Ppu) {
+  if (r.N <= 0) return { q: r.Q_capbank - r.Q_xmer, allowed: true };
+  const p_d = Ppu * (r.P + r.lossSum) * 1000 / r.N;      // kW per inverter
+  let q_i, allowed;
+  if (r.pqActive) {
+    const c = qCapAt(s.pq, 1.0, r.S_inv > 0 ? p_d / r.S_inv : 0);
+    allowed = c.allowed;
+    q_i = c.allowed ? c.pct / 100 * r.S_inv : 0;
+  } else if (r.qOvr) {
+    allowed = p_d <= r.S_eff + 1e-9;
+    q_i = allowed ? Math.min(num(s.invQOverride), Math.sqrt(Math.max(0, r.S_eff ** 2 - p_d ** 2))) : 0;
+  } else {
+    allowed = p_d <= r.S_inv + 1e-9;
+    q_i = allowed ? Math.sqrt(Math.max(0, r.S_inv ** 2 - p_d ** 2)) : 0;
+  }
+  return { q: r.N * q_i / 1000 + r.Q_capbank - r.Q_xmer, allowed };
+}
+/* Compliance sweep over the output range at nominal voltage */
+function gcCompliance(s, r) {
+  const gc = s.gridCode;
+  const pts = [];
+  let worst = null, covered = true;
+  for (let k = 0; k <= 100; k++) {
+    const Ppu = k / 100;
+    const req = gcQreqPu(gc, Ppu) * r.P;                 // MVAr at POI
+    const cap = plantCapPOI(s, r, Ppu);
+    const capQ = Math.max(0, cap.q);
+    const short = req - capQ;
+    if (short > 1e-6) {
+      covered = false;
+      if (!worst || short > worst.short) worst = { Ppu, req, capQ, short };
+    }
+    pts.push({ Ppu, req, capQ, allowed: cap.allowed });
+  }
+  return { pts, covered, worst };
 }
 
 /* ---------- calculation model ---------- */
@@ -834,8 +962,11 @@ function voltageSweep(s, r) {
       q_v = curtailed ? 0 : Math.min(r.q_inv, Math.sqrt(Math.max(0, S_v * S_v - r.p_inv * r.p_inv))); // kVAr
     }
     const Q_plant = r.N * q_v / 1000 + r.Q_capbank;       // MVAr
-    const margin = Q_plant - r.Q_total;
-    return { V, S_v, q_v, Q_plant, margin, curtailed, ok: !curtailed && margin >= -1e-9 };
+    // requirement at this voltage: grid-code Q (tapered by V) plus transformer consumption
+    const req = r.Q_grid * gcVqFactor(s.gridCode, V) + r.Q_xmer;
+    const margin = Q_plant - req;
+    return { V, S_v, q_v, Q_plant, req, margin, curtailed,
+             ok: margin >= -1e-9 && !(curtailed && req > 1e-9) };
   });
 }
 
@@ -1095,6 +1226,132 @@ function drawPQ(r) {
   svg.onmouseleave = () => { tip.style.display = "none"; };
 }
 
+/* ---------- grid code preview & compliance charts ---------- */
+function svgEl(tag, attrs, text) {
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  return e;
+}
+function chartInks() {
+  const css = getComputedStyle(document.documentElement);
+  return {
+    accent: css.getPropertyValue("--accent").trim(),
+    p: css.getPropertyValue("--series-p").trim(),
+    ink: css.getPropertyValue("--ink").trim(),
+    muted: css.getPropertyValue("--muted").trim(),
+    grid: css.getPropertyValue("--grid").trim(),
+    crit: css.getPropertyValue("--crit").trim(),
+    surface: css.getPropertyValue("--surface").trim(),
+  };
+}
+const MONO = "ui-monospace, Menlo, monospace";
+
+function drawGCPreviews() {
+  const gc = state.gridCode;
+  const c = chartInks();
+  const t = gcTanPhi(gc);
+  // --- P-Q envelope ---
+  {
+    const svg = document.getElementById("gcPQ");
+    svg.innerHTML = "";
+    const W = 360, H = 190, mL = 42, mR = 14, mT = 12, mB = 30;
+    const yMax = Math.max(t, 0.1) * 1.25;
+    const x = p => mL + p * (W - mL - mR);
+    const y = q => H - mB - (q + yMax) / (2 * yMax) * (H - mT - mB);
+    svg.append(svgEl("line", { x1: mL, y1: y(0), x2: W - mR, y2: y(0), stroke: c.grid, "stroke-width": 1 }));
+    [-t, 0, t].forEach(qv => {
+      svg.append(svgEl("text", { x: mL - 6, y: y(qv) + 3.5, "text-anchor": "end", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(qv, 2)));
+    });
+    [0, 0.5, 1].forEach(pv => {
+      svg.append(svgEl("text", { x: x(pv), y: H - mB + 14, "text-anchor": "middle", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(pv, 1)));
+    });
+    svg.append(svgEl("text", { x: W - mR, y: H - 4, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "P (p.u. of Pmax)"));
+    svg.append(svgEl("text", { x: mL - 6, y: mT + 2, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "Q/Pmax"));
+    for (const sgn of [1, -1]) {
+      const pts = [];
+      for (let k = 0; k <= 100; k++) pts.push({ p: k / 100, q: sgn * gcQreqPu(gc, k / 100) });
+      const d = pts.map((d2, i) => `${i ? "L" : "M"} ${x(d2.p).toFixed(1)} ${y(d2.q).toFixed(1)}`).join(" ");
+      svg.append(svgEl("path", { d, fill: "none", stroke: c.accent, "stroke-width": 2, "stroke-linejoin": "round" }));
+    }
+    svg.append(svgEl("text", { x: x(0.98), y: y(t) - 6, "text-anchor": "end", fill: c.accent, "font-size": 9.5, "font-weight": 600, "font-family": MONO }, `±${fmt(t, 3)} pu`));
+  }
+  // --- V-Q profile ---
+  {
+    const svg = document.getElementById("gcVQ");
+    svg.innerHTML = "";
+    const W = 360, H = 190, mL = 42, mR = 14, mT = 12, mB = 30;
+    const vLo = Math.min(num(gc.vZeroLo), 0.85) - 0.03, vHi = Math.max(num(gc.vZeroHi), 1.15) + 0.03;
+    const yMax = Math.max(t, 0.1) * 1.25;
+    const x = v => mL + (v - vLo) / (vHi - vLo) * (W - mL - mR);
+    const y = q => H - mB - (q + yMax) / (2 * yMax) * (H - mT - mB);
+    svg.append(svgEl("line", { x1: mL, y1: y(0), x2: W - mR, y2: y(0), stroke: c.grid, "stroke-width": 1 }));
+    [num(gc.vZeroLo), num(gc.vFullLo), 1, num(gc.vFullHi), num(gc.vZeroHi)].forEach(vv => {
+      svg.append(svgEl("text", { x: x(vv), y: H - mB + 14, "text-anchor": "middle", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(vv, 2)));
+    });
+    [-t, 0, t].forEach(qv => {
+      svg.append(svgEl("text", { x: mL - 6, y: y(qv) + 3.5, "text-anchor": "end", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(qv, 2)));
+    });
+    svg.append(svgEl("text", { x: W - mR, y: H - 4, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "V (p.u.)"));
+    svg.append(svgEl("text", { x: mL - 6, y: mT + 2, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "Q/Pmax"));
+    for (const sgn of [1, -1]) {
+      const pts = [];
+      for (let k = 0; k <= 120; k++) {
+        const v = vLo + (vHi - vLo) * k / 120;
+        pts.push({ v, q: sgn * t * gcVqFactor(gc, v) });
+      }
+      const d = pts.map((d2, i) => `${i ? "L" : "M"} ${x(d2.v).toFixed(1)} ${y(d2.q).toFixed(1)}`).join(" ");
+      svg.append(svgEl("path", { d, fill: "none", stroke: c.accent, "stroke-width": 2, "stroke-linejoin": "round" }));
+    }
+  }
+}
+
+function drawCompliance(r) {
+  const comp = gcCompliance(state, r);
+  const c = chartInks();
+  const svg = document.getElementById("compchart");
+  svg.innerHTML = "";
+  const W = 360, H = 230, mL = 44, mR = 12, mT = 14, mB = 32;
+  const yMax = Math.max(...comp.pts.map(d => Math.max(d.req, d.capQ)), 0.1) * 1.15;
+  const x = Ppu => mL + Ppu * (W - mL - mR);
+  const y = q => H - mB - q / yMax * (H - mT - mB);
+  for (let i = 0; i <= 3; i++) {
+    const qv = yMax / 3 * i;
+    svg.append(svgEl("line", { x1: mL, y1: y(qv), x2: W - mR, y2: y(qv), stroke: c.grid, "stroke-width": 1 }));
+    svg.append(svgEl("text", { x: mL - 6, y: y(qv) + 3.5, "text-anchor": "end", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(qv, 0)));
+  }
+  [0, 0.25, 0.5, 0.75, 1].forEach(pv => {
+    svg.append(svgEl("text", { x: x(pv), y: H - mB + 14, "text-anchor": "middle", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(pv * r.P, 0)));
+  });
+  svg.append(svgEl("text", { x: W - mR, y: H - 4, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "P at POI (MW)"));
+  svg.append(svgEl("text", { x: mL - 6, y: mT - 2, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "MVAr"));
+  // shortfall shading where requirement exceeds capability
+  let region = null;
+  const regions = [];
+  comp.pts.forEach(d => {
+    if (d.req > d.capQ + 1e-6) { (region ??= []).push(d); }
+    else if (region) { regions.push(region); region = null; }
+  });
+  if (region) regions.push(region);
+  regions.forEach(seg => {
+    const up = seg.map((d, i) => `${i ? "L" : "M"} ${x(d.Ppu).toFixed(1)} ${y(d.req).toFixed(1)}`).join(" ");
+    const dn = [...seg].reverse().map(d => `L ${x(d.Ppu).toFixed(1)} ${y(d.capQ).toFixed(1)}`).join(" ");
+    svg.append(svgEl("path", { d: `${up} ${dn} Z`, fill: c.crit, opacity: 0.14, stroke: "none" }));
+  });
+  // requirement (dashed ink) and capability (blue)
+  const reqD = comp.pts.map((d, i) => `${i ? "L" : "M"} ${x(d.Ppu).toFixed(1)} ${y(d.req).toFixed(1)}`).join(" ");
+  svg.append(svgEl("path", { d: reqD, fill: "none", stroke: c.ink, "stroke-width": 1.5, "stroke-dasharray": "5 4", "stroke-linejoin": "round" }));
+  const capD = comp.pts.map((d, i) => `${i ? "L" : "M"} ${x(d.Ppu).toFixed(1)} ${y(d.capQ).toFixed(1)}`).join(" ");
+  svg.append(svgEl("path", { d: capD, fill: "none", stroke: c.p, "stroke-width": 2, "stroke-linejoin": "round" }));
+  // direct labels
+  const lastReq = comp.pts[comp.pts.length - 1], midCap = comp.pts[Math.round(comp.pts.length * 0.45)];
+  svg.append(svgEl("text", { x: x(0.99), y: y(lastReq.req) + (lastReq.capQ > lastReq.req ? 14 : -6), "text-anchor": "end", fill: c.ink, "font-size": 9.5, "font-weight": 600, "font-family": MONO }, "required"));
+  svg.append(svgEl("text", { x: x(midCap.Ppu), y: y(midCap.capQ) - 7, "text-anchor": "middle", fill: c.p, "font-size": 9.5, "font-weight": 600, "font-family": MONO }, "capability"));
+  // operating level marker at full output
+  svg.append(svgEl("circle", { cx: x(1), cy: y(comp.pts[100].capQ), r: 4, fill: c.p, stroke: c.surface, "stroke-width": 2 }));
+  return comp;
+}
+
 /* ---------- voltage capability chart & table ---------- */
 function drawVChart(rows, r) {
   const svg = document.getElementById("vchart");
@@ -1119,7 +1376,7 @@ function drawVChart(rows, r) {
 
   const W = 760, H = 300, mL = 52, mR = 118, mT = 30, mB = 40;
   const vMin = rows[0].V, vMax = rows[rows.length - 1].V;
-  const yMax = Math.max(r.Q_total, ...rows.map(d => d.Q_plant)) * 1.12 || 1;
+  const yMax = Math.max(...rows.map(d => Math.max(d.Q_plant, d.req))) * 1.12 || 1;
   const x = V => vMax === vMin ? mL + (W - mL - mR) / 2 : mL + (V - vMin) / (vMax - vMin) * (W - mL - mR);
   const y = q => H - mB - (q / yMax) * (H - mT - mB);
   const mono = "ui-monospace, Menlo, monospace";
@@ -1138,12 +1395,13 @@ function drawVChart(rows, r) {
   });
   svg.append(el("text", { x: (mL + W - mR) / 2, y: H - 5, "text-anchor": "middle", fill: cMuted, "font-size": 10.5 }, "Grid voltage (p.u.)"));
 
-  // required-demand reference line
-  const yReq = y(r.Q_total);
-  svg.append(el("line", { x1: mL, y1: yReq, x2: W - mR, y2: yReq, stroke: cInk, "stroke-width": 1.5, "stroke-dasharray": "6 4" }));
+  // requirement curve: grid-code Q tapered by voltage, plus transformer consumption
+  const reqPath = rows.map((d, i) => `${i ? "L" : "M"} ${x(d.V).toFixed(1)} ${y(d.req).toFixed(1)}`).join(" ");
+  svg.append(el("path", { d: reqPath, fill: "none", stroke: cInk, "stroke-width": 1.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
+  const yReq = y(rows[rows.length - 1].req);
   const refLbl = el("text", { x: W - mR + 8, y: yReq + 3.5, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono });
   refLbl.append(el("tspan", { x: W - mR + 8, dy: 0 }, `required Q`));
-  refLbl.append(el("tspan", { x: W - mR + 8, dy: 12 }, `${fmt(r.Q_total)} MVAr`));
+  refLbl.append(el("tspan", { x: W - mR + 8, dy: 12 }, `(grid code)`));
   svg.append(refLbl);
 
   // capability line
@@ -1161,8 +1419,8 @@ function drawVChart(rows, r) {
     svg.append(el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 4.5, fill, stroke: cSurface, "stroke-width": 2 }));
     const hit = el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 14, fill: "transparent", cursor: "pointer" });
     hit.addEventListener("mouseenter", () => {
-      tip.innerHTML = `<span class="t">${fmt(d.V, 2)} p.u.</span><br>Q capability ${fmt(d.Q_plant)} MVAr<br>` +
-        (d.curtailed ? `<span style="color:${cCrit}">P curtailed at this voltage</span>`
+      tip.innerHTML = `<span class="t">${fmt(d.V, 2)} p.u.</span><br>Q capability ${fmt(d.Q_plant)} MVAr<br>required ${fmt(d.req)} MVAr<br>` +
+        (d.curtailed && d.req > 1e-9 ? `<span style="color:${cCrit}">P curtailed at this voltage</span>`
                      : `margin ${(d.margin >= 0 ? "+" : "")}${fmt(d.margin)} MVAr`);
       tip.style.display = "block";
       const wrap = svg.parentElement.getBoundingClientRect();
@@ -1182,16 +1440,17 @@ function renderVTable(rows, r) {
   tb.innerHTML = "";
   rows.forEach(d => {
     const tr = document.createElement("tr");
-    const status = d.curtailed
+    const status = d.curtailed && d.req > 1e-9
       ? `<span class="vstatus warn">⚠ P curtailed</span>`
       : d.ok
-        ? `<span class="vstatus ok">✓ meets demand</span>`
+        ? (d.req > 1e-9 ? `<span class="vstatus ok">✓ meets requirement</span>` : `<span class="vstatus ok">✓ no requirement</span>`)
         : `<span class="vstatus bad">✕ short ${fmt(-d.margin)} MVAr</span>`;
     tr.innerHTML = `
       <td>${fmt(d.V, 2)}</td>
       <td>${fmt(d.S_v, 1)}</td>
       <td>${fmt(d.q_v, 1)}</td>
       <td>${fmt(d.Q_plant)}</td>
+      <td>${fmt(d.req)}</td>
       <td>${(d.margin >= 0 ? "+" : "") + fmt(d.margin)}</td>
       <td>${status}</td>`;
     tb.append(tr);
@@ -1230,6 +1489,22 @@ function update() {
   document.getElementById("statQ").textContent = fmt(r.Q_total);
   document.getElementById("statS").textContent = fmt(r.S_actual);
   drawTriangle(r);
+
+  drawGCPreviews();
+  const comp = drawCompliance(r);
+  const compCheck = document.getElementById("compCheck");
+  const compIcon = document.getElementById("compIcon");
+  const compMsg = document.getElementById("compMsg");
+  compCheck.className = "check " + (comp.covered ? "good" : "crit");
+  compIcon.textContent = comp.covered ? "✓" : "✕";
+  compMsg.innerHTML = comp.covered
+    ? `The plant covers the grid code's reactive requirement across the whole output range (cos φ ${fmt(num(state.gridCode.pfReq), 3)} at the POI).`
+    : `Requirement not covered: worst shortfall <b>${fmt(comp.worst.short)} MVAr</b> at <b>${fmt(comp.worst.Ppu * 100, 0)}%</b> output (needs ${fmt(comp.worst.req)}, plant can deliver ${fmt(comp.worst.capQ)}). Add a capacitor bank, more inverters, or a lower inverter PF.`;
+  const full = comp.pts[100];
+  document.getElementById("compReq").textContent = fmt(full.req) + " MVAr";
+  document.getElementById("compCap").textContent = fmt(full.capQ) + " MVAr";
+  const worstMargin = Math.min(...comp.pts.map(d => d.capQ - d.req));
+  document.getElementById("compWorst").textContent = (worstMargin >= 0 ? "+" : "") + fmt(worstMargin) + " MVAr";
 
   drawPQ(r);
   const qOp = r.N > 0 ? r.Q_for_inv * 1000 / r.N : 0;
@@ -1324,6 +1599,41 @@ bind("invKVA", "invKVA");
 bind("invPF", "invPF");
 bind("capBank", "capBank");
 
+/* grid code controls */
+const GC_FIELDS = [["gcPf", "pfReq"], ["gcPmin", "pMin"], ["gcVfLo", "vFullLo"], ["gcVfHi", "vFullHi"], ["gcVzLo", "vZeroLo"], ["gcVzHi", "vZeroHi"]];
+function fillGCInputs() {
+  const gc = state.gridCode;
+  document.getElementById("gcPreset").value = gc.preset || "custom";
+  document.getElementById("gcShape").value = gc.shape || "rect";
+  GC_FIELDS.forEach(([id, key]) => { document.getElementById(id).value = gc[key] ?? ""; });
+}
+document.getElementById("gcPreset").addEventListener("change", e => {
+  const p = GC_PRESETS[e.target.value];
+  if (p) {
+    state.gridCode = { preset: e.target.value, ...p };
+    state.powerFactor = p.pfReq;
+    document.getElementById("powerFactor").value = p.pfReq;
+  } else {
+    state.gridCode.preset = "custom";
+  }
+  fillGCInputs();
+  update();
+});
+document.getElementById("gcShape").addEventListener("change", e => {
+  state.gridCode.shape = e.target.value;
+  state.gridCode.preset = "custom";
+  document.getElementById("gcPreset").value = "custom";
+  update();
+});
+GC_FIELDS.forEach(([id, key]) => {
+  document.getElementById(id).addEventListener("input", e => {
+    state.gridCode[key] = e.target.value === "" ? null : num(e.target.value);
+    state.gridCode.preset = "custom";
+    document.getElementById("gcPreset").value = "custom";
+    update();
+  });
+});
+
 const invQInput = document.getElementById("invQ");
 invQInput.addEventListener("input", () => {
   state.invQOverride = invQInput.value === "" ? null : Math.max(0, num(invQInput.value));
@@ -1415,6 +1725,8 @@ function initAll() {
     .forEach(id => { document.getElementById(id).value = state[id] ?? ""; });
   if (!Array.isArray(state.voltLevels) || !state.voltLevels.length) state.voltLevels = [...DEFAULTS.voltLevels];
   if (!state.pq || !Array.isArray(state.pq.rows) || !Array.isArray(state.pq.pLevels)) state.pq = structuredClone(DEFAULTS.pq);
+  if (!state.gridCode || typeof state.gridCode.pfReq !== "number") state.gridCode = structuredClone(DEFAULTS.gridCode);
+  fillGCInputs();
   document.getElementById("voltLevels").value = state.voltLevels.join(", ");
   document.getElementById("invCount").value = state.invCountOverride ?? "";
   document.getElementById("invQ").value = state.invQOverride ?? "";
