@@ -398,26 +398,33 @@
         <div class="field" style="grid-column: 1 / -1">
           <label for="gcPreset">Grid code</label>
           <div class="inwrap"><select id="gcPreset">
-            <option value="pf95rect">Fixed PF 0.95 lead/lag — full Q band (typical)</option>
-            <option value="pf95tri">Fixed PF 0.95 lead/lag — Q ∝ P (triangular)</option>
-            <option value="pf90rect">Fixed PF 0.90 lead/lag — full Q band (demanding)</option>
+            <option value="gb_g99">United Kingdom — ENA G99 / GB Grid Code (Type C/D PPM)</option>
+            <option value="de_4110">Germany — VDE-AR-N 4110 (medium voltage)</option>
+            <option value="de_4120">Germany — VDE-AR-N 4120 (high voltage)</option>
+            <option value="us_1547b">USA — IEEE 1547-2018 (Category B)</option>
+            <option value="au_ner">Australia — NER S5.2.5.1 (Automatic access)</option>
+            <option value="eu_rfg">EU — ENTSO-E RfG (typical Type C/D implementation)</option>
+            <option value="pf95rect">Generic — fixed PF 0.95 lead/lag</option>
+            <option value="pf90rect">Generic — fixed PF 0.90 lead/lag</option>
             <option value="custom">Custom</option>
           </select></div>
+          <div class="note" id="gcNote" style="margin-top:8px"></div>
         </div>
         <div class="field">
-          <label for="gcPf">Required PF at POI</label>
+          <label for="gcQmax">Q at P<sub>max</sub></label>
+          <div class="inwrap"><input id="gcQmax" type="number" step="0.001" min="0" max="1.5"><span class="unit">× P<sub>max</sub></span></div>
+        </div>
+        <div class="field">
+          <label for="gcPf">Equivalent PF at POI</label>
           <div class="inwrap"><input id="gcPf" type="number" step="0.001" min="0.5" max="1"><span class="unit">cos&nbsp;φ</span></div>
         </div>
         <div class="field">
-          <label for="gcShape">P–Q envelope shape</label>
-          <div class="inwrap"><select id="gcShape">
-            <option value="rect">Rectangular (full Q above min output)</option>
-            <option value="tri">Triangular (Q ∝ P)</option>
-          </select></div>
+          <label for="gcPmin">No requirement below</label>
+          <div class="inwrap"><input id="gcPmin" type="number" step="1" min="0" max="100"><span class="unit">% P<sub>max</sub></span></div>
         </div>
         <div class="field">
-          <label for="gcPmin">Min output for requirement</label>
-          <div class="inwrap"><input id="gcPmin" type="number" step="1" min="0" max="100"><span class="unit">% P<sub>max</sub></span></div>
+          <label for="gcPfull">Full Q required from</label>
+          <div class="inwrap"><input id="gcPfull" type="number" step="1" min="0" max="100"><span class="unit">% P<sub>max</sub></span></div>
         </div>
         <div class="field">
           <label for="gcVfLo">Full-Q voltage band</label>
@@ -656,7 +663,7 @@ const DEFAULTS = {
   powerFactor: 0.95,
   pfSense: "Leading",
   xmerMargin: 10,
-  gridCode: { preset: "pf95rect", pfReq: 0.95, shape: "rect", pMin: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
+  gridCode: { preset: "gb_g99", qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 50, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
   invKVA: 363,
   invPF: 0.918,
   capBank: 0,
@@ -702,6 +709,14 @@ function load() {
         if (!Array.isArray(s.voltLevels) || !s.voltLevels.length) s.voltLevels = [...DEFAULTS.voltLevels];
         if (!s.pq || !Array.isArray(s.pq.rows) || !Array.isArray(s.pq.pLevels)) s.pq = structuredClone(DEFAULTS.pq);
         if (!s.gridCode || typeof s.gridCode.pfReq !== "number") s.gridCode = structuredClone(DEFAULTS.gridCode);
+        if (s.gridCode.shape !== undefined) {
+          // migrate the old rect/tri envelope to the pMin→pFull ramp model
+          s.gridCode.pFull = s.gridCode.shape === "tri" ? 100 : s.gridCode.pMin;
+          s.gridCode.qMaxPu = Math.round(Math.tan(Math.acos(Math.min(Math.max(s.gridCode.pfReq, 0.01), 1))) * 1000) / 1000;
+          delete s.gridCode.shape;
+          if (!["pf95rect", "pf90rect"].includes(s.gridCode.preset)) s.gridCode.preset = "custom";
+        }
+        if (typeof s.gridCode.pFull !== "number") s.gridCode.pFull = s.gridCode.pMin ?? 20;
         delete s.datasheet;
         return s;
       }
@@ -758,20 +773,66 @@ function pqIsActive(s) {
             s.pq.rows.some(r => r.q.some(x => x != null && x !== "")));
 }
 
-/* ---------- grid code requirement ---------- */
+/* ---------- grid code requirement database ----------
+   Published reactive-capability requirements, normalised to one envelope model:
+   Q limit = qMaxPu × Pmax, zero below pMin % output, ramping linearly up to
+   full at pFull % output, applied over a voltage band with linear tapers.
+   Values reflect the cited clauses; always confirm against the connection
+   agreement — many codes have DSO/TSO-selectable variants. */
 const GC_PRESETS = {
-  pf95rect: { pfReq: 0.95, shape: "rect", pMin: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
-  pf95tri:  { pfReq: 0.95, shape: "tri",  pMin: 10, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
-  pf90rect: { pfReq: 0.90, shape: "rect", pMin: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10 },
+  gb_g99: {
+    label: "United Kingdom — ENA G99 / GB Grid Code (Type C/D PPM)",
+    qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 50,
+    vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10,
+    note: "0.95 lead/lag at Registered Capacity (Q = ±0.33 Pmax); full range maintained down to 50% output, reducing linearly below, none required under 20% (Grid Code ECC.6.3.2 / G99 §13)." },
+  de_4110: {
+    label: "Germany — VDE-AR-N 4110 (medium voltage)",
+    qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20,
+    vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.925, vZeroHi: 1.075,
+    note: "cos φ 0.95 under/overexcited whenever feed-in exceeds 20% of installed capacity; reactive control range applies for 0.925–1.075 p.u. voltage." },
+  de_4120: {
+    label: "Germany — VDE-AR-N 4120 (high voltage)",
+    qMaxPu: 0.411, pfReq: 0.925, pMin: 20, pFull: 20,
+    vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10,
+    note: "cos φ 0.925 variant shown (Q = ±0.41 Pmax); VDE-AR-N 4120 defines three TSO-selectable variants — set the one in your connection offer." },
+  us_1547b: {
+    label: "USA — IEEE 1547-2018 (Category B)",
+    qMaxPu: 0.44, pfReq: 0.90, pMin: 20, pFull: 20,
+    vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10,
+    note: "Inject and absorb 44% of nameplate kVA (chosen to match 0.90 PF at rated power); full capability required above 20% of rated active power." },
+  au_ner: {
+    label: "Australia — NER S5.2.5.1 (Automatic access)",
+    qMaxPu: 0.395, pfReq: 0.93, pMin: 0, pFull: 0,
+    vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10,
+    note: "Supply and absorb ±0.395 × rated active power continuously at the connection point, at any level of active power." },
+  eu_rfg: {
+    label: "EU — ENTSO-E RfG (typical Type C/D implementation)",
+    qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 50,
+    vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10,
+    note: "Regulation 2016/631 leaves the exact U-Q/Pmax envelope to each TSO — this is a typical national choice; check your TSO's implementation." },
+  pf95rect: {
+    label: "Generic — fixed PF 0.95 lead/lag",
+    qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20,
+    vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10,
+    note: "Simple fixed-power-factor requirement, full Q above 20% output." },
+  pf90rect: {
+    label: "Generic — fixed PF 0.90 lead/lag",
+    qMaxPu: 0.484, pfReq: 0.90, pMin: 20, pFull: 20,
+    vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10,
+    note: "Simple fixed-power-factor requirement, full Q above 20% output." },
 };
-function gcTanPhi(gc) {
+function gcQmaxPu(gc) {
+  const q = num(gc.qMaxPu);
+  if (q > 0) return q;
   return Math.tan(Math.acos(clamp(num(gc.pfReq) || 1, 0.01, 1)));
 }
 /* Required Q at the POI in p.u. of Pmax, at output level Ppu (0..1) */
 function gcQreqPu(gc, Ppu) {
-  if (Ppu < num(gc.pMin) / 100 - 1e-9) return 0;
-  const t = gcTanPhi(gc);
-  return gc.shape === "tri" ? t * Ppu : t;
+  const pMin = num(gc.pMin) / 100, pFull = Math.max(num(gc.pFull) / 100, num(gc.pMin) / 100);
+  if (Ppu < pMin - 1e-9) return 0;
+  const qMax = gcQmaxPu(gc);
+  if (Ppu >= pFull - 1e-9 || pFull <= pMin + 1e-9) return qMax;
+  return qMax * (Ppu - pMin) / (pFull - pMin);
 }
 /* 0..1 factor over voltage: 1 inside the full band, tapering to 0 at the zero limits */
 function gcVqFactor(gc, V) {
@@ -963,7 +1024,7 @@ function voltageSweep(s, r) {
     }
     const Q_plant = r.N * q_v / 1000 + r.Q_capbank;       // MVAr
     // requirement at this voltage: grid-code Q (tapered by V) plus transformer consumption
-    const req = r.Q_grid * gcVqFactor(s.gridCode, V) + r.Q_xmer;
+    const req = gcQreqPu(s.gridCode, 1) * r.P * gcVqFactor(s.gridCode, V) + r.Q_xmer;
     const margin = Q_plant - req;
     return { V, S_v, q_v, Q_plant, req, margin, curtailed,
              ok: margin >= -1e-9 && !(curtailed && req > 1e-9) };
@@ -1250,7 +1311,7 @@ const MONO = "ui-monospace, Menlo, monospace";
 function drawGCPreviews() {
   const gc = state.gridCode;
   const c = chartInks();
-  const t = gcTanPhi(gc);
+  const t = gcQmaxPu(gc);
   // --- P-Q envelope ---
   {
     const svg = document.getElementById("gcPQ");
@@ -1600,17 +1661,22 @@ bind("invPF", "invPF");
 bind("capBank", "capBank");
 
 /* grid code controls */
-const GC_FIELDS = [["gcPf", "pfReq"], ["gcPmin", "pMin"], ["gcVfLo", "vFullLo"], ["gcVfHi", "vFullHi"], ["gcVzLo", "vZeroLo"], ["gcVzHi", "vZeroHi"]];
+const GC_FIELDS = [["gcQmax", "qMaxPu"], ["gcPf", "pfReq"], ["gcPmin", "pMin"], ["gcPfull", "pFull"], ["gcVfLo", "vFullLo"], ["gcVfHi", "vFullHi"], ["gcVzLo", "vZeroLo"], ["gcVzHi", "vZeroHi"]];
 function fillGCInputs() {
   const gc = state.gridCode;
-  document.getElementById("gcPreset").value = gc.preset || "custom";
-  document.getElementById("gcShape").value = gc.shape || "rect";
+  document.getElementById("gcPreset").value = GC_PRESETS[gc.preset] ? gc.preset : "custom";
   GC_FIELDS.forEach(([id, key]) => { document.getElementById(id).value = gc[key] ?? ""; });
+  const note = document.getElementById("gcNote");
+  const p = GC_PRESETS[gc.preset];
+  note.hidden = false;
+  note.textContent = p ? p.note : "Custom envelope — set the parameters below to match your interconnection agreement.";
 }
 document.getElementById("gcPreset").addEventListener("change", e => {
-  const p = GC_PRESETS[e.target.value];
+  const key = e.target.value;
+  const p = GC_PRESETS[key];
   if (p) {
-    state.gridCode = { preset: e.target.value, ...p };
+    const { label, note, ...params } = p;
+    state.gridCode = { preset: key, ...params };
     state.powerFactor = p.pfReq;
     document.getElementById("powerFactor").value = p.pfReq;
   } else {
@@ -1619,17 +1685,20 @@ document.getElementById("gcPreset").addEventListener("change", e => {
   fillGCInputs();
   update();
 });
-document.getElementById("gcShape").addEventListener("change", e => {
-  state.gridCode.shape = e.target.value;
-  state.gridCode.preset = "custom";
-  document.getElementById("gcPreset").value = "custom";
-  update();
-});
 GC_FIELDS.forEach(([id, key]) => {
   document.getElementById(id).addEventListener("input", e => {
     state.gridCode[key] = e.target.value === "" ? null : num(e.target.value);
     state.gridCode.preset = "custom";
+    // keep Q at Pmax and equivalent PF consistent whichever one is edited
+    if (key === "pfReq" && num(state.gridCode.pfReq) > 0) {
+      state.gridCode.qMaxPu = Math.round(Math.tan(Math.acos(clamp(num(state.gridCode.pfReq), 0.01, 1))) * 1000) / 1000;
+      document.getElementById("gcQmax").value = state.gridCode.qMaxPu;
+    } else if (key === "qMaxPu" && num(state.gridCode.qMaxPu) > 0) {
+      state.gridCode.pfReq = Math.round(Math.cos(Math.atan(num(state.gridCode.qMaxPu))) * 1000) / 1000;
+      document.getElementById("gcPf").value = state.gridCode.pfReq;
+    }
     document.getElementById("gcPreset").value = "custom";
+    document.getElementById("gcNote").textContent = "Custom envelope — set the parameters below to match your interconnection agreement.";
     update();
   });
 });
