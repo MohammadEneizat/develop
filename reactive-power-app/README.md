@@ -16,9 +16,11 @@ injection limit and the reactive power demand.
    summed with a design margin (10 % in the worksheet).
 3. **Internal system losses** — PVsyst loss fractions applied to the grid limit
    (AC cable, auxiliary system, transmission line, miscellaneous).
-4. **Inverter capability** — per-inverter reactive capability `√(S² − P²)` at
-   the chosen inverter power factor, required inverter count
-   `⌈Q_total / q_inv⌉`, and the net power actually delivered to the grid.
+4. **Inverter fleet** — no power-factor knob: each inverter dispatches the
+   active power the plant needs, (grid limit + losses) ÷ count, and its
+   reactive capability follows from that loading. Enter the plant's inverter
+   count or use the recommended count — the smallest fleet covering both the
+   active delivery and the reactive demand.
 5. **Inverter P–Q capability** *(new, not in the worksheet)* — the datasheet's
    Q(t)-mode capability table, editable in place, rendered as a P–Q diagram.
 6. **Reactive capability vs grid voltage** *(new, not in the worksheet)* — the
@@ -90,12 +92,11 @@ apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
   covered/not-covered verdict.
 
 - **Live recalculation** — every result updates as you type.
-- **Built-in Goal Seek** — replaces Excel's manual *Data ▸ What-If Analysis ▸
-  Goal Seek* step. It solves analytically for the minimum inverter count that
-  meets both the active requirement (grid limit + losses) and the reactive
-  requirement, and reports the full feasible power-factor band (for the Belvior
-  defaults: 164 inverters, cos φ 0.9162–0.9181; the worksheet's goal-seeked
-  0.918 falls inside this band).
+- **Recommended inverter count** — replaces Excel's manual *Goal Seek* step
+  entirely: the app computes the smallest count whose dispatch is permitted
+  and covers the reactive demand (Belvior defaults: 164 with the circle
+  model, matching the worksheet's goal-seeked count; 166 with the capability
+  table). The equivalent cos φ at dispatch is reported as an output.
 - **Dynamic rows** — add or remove transformer groups and loss sources instead
   of a fixed layout with empty blocks.
 - **Inverter P–Q capability table & diagram** — enter the manufacturer's

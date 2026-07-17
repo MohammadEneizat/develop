@@ -493,44 +493,36 @@
 
     <!-- Step 4 -->
     <section class="card">
-      <h2><span class="stepno">STEP 4</span> Inverter capability &amp; compensation</h2>
-      <p class="sub">Operating inverters below unity power factor frees reactive capability: Q = √(S² − P²) per unit. Goal Seek finds the power factor that meets both the active and reactive requirement with the fewest inverters — no spreadsheet What-If needed.</p>
+      <h2><span class="stepno">STEP 4</span> Inverter fleet &amp; compensation</h2>
+      <p class="sub">No power-factor knob: each inverter simply dispatches the active power the plant needs — (grid limit + losses) ÷ count — and its reactive capability follows from that loading. Enter the number of inverters your plant has, or leave it blank to use the recommended count: the smallest fleet that covers <b>both</b> the active delivery and the reactive demand.</p>
       <div class="fields">
         <div class="field">
           <label for="invKVA">Inverter apparent power</label>
           <div class="inwrap"><input id="invKVA" type="number" step="any" min="1" value="363"><span class="unit">kVA</span></div>
         </div>
         <div class="field">
-          <label for="invPF">PF at inverter level</label>
-          <div class="inwrap"><input id="invPF" type="number" step="0.0001" min="0.5" max="0.9999" value="0.918"><span class="unit">cos&nbsp;φ</span></div>
+          <label for="invCount">Number of inverters</label>
+          <div class="inwrap"><input id="invCount" type="number" step="1" min="0" placeholder="recommended"><span class="unit">nos.</span></div>
         </div>
         <div class="field">
           <label for="invQ">Reactive capability / inverter</label>
-          <div class="inwrap"><input id="invQ" type="number" step="any" min="0" placeholder="auto (from PF)"><span class="unit">kVAr</span></div>
+          <div class="inwrap"><input id="invQ" type="number" step="any" min="0" placeholder="auto"><span class="unit">kVAr</span></div>
         </div>
         <div class="field">
           <label for="capBank">Capacitor bank</label>
           <div class="inwrap"><input id="capBank" type="number" step="any" min="0" value="0"><span class="unit">MVAr</span></div>
         </div>
-        <div class="field">
-          <label for="invCount">Number of inverters</label>
-          <div class="inwrap"><input id="invCount" type="number" step="1" min="0" placeholder="auto"><span class="unit">nos.</span></div>
-        </div>
-        <div class="field">
-          <label>&nbsp;</label>
-          <button class="primary" id="goalSeek" type="button" style="width:100%">Goal-seek inverter PF</button>
-        </div>
       </div>
-      <div class="note" id="goalSeekNote" hidden></div>
       <div class="note" id="qOvrNote" hidden></div>
       <div class="derived">
-        <div class="chip"><span class="k">Active power / inverter</span><span class="v" id="outInvP">—<small>kW</small></span></div>
-        <div class="chip"><span class="k">Reactive capability / inverter</span><span class="v" id="outInvQ">—<small>kVAr</small></span></div>
-        <div class="chip"><span class="k">Q for inverters (after cap bank)</span><span class="v" id="outQInv">—<small>MVAr</small></span></div>
-        <div class="chip"><span class="k">Minimum required (auto)</span><span class="v" id="outNReq">—<small>nos.</small></span></div>
+        <div class="chip"><span class="k">Recommended count (P + Q)</span><span class="v" id="outNReq">—<small>nos.</small></span></div>
         <div class="chip"><span class="k">Inverters in design</span><span class="v" id="outNInv">—<small>nos.</small></span></div>
+        <div class="chip"><span class="k">Dispatch / inverter</span><span class="v" id="outInvP">—<small>kW</small></span></div>
+        <div class="chip"><span class="k">Equivalent cos φ</span><span class="v" id="outInvPF">—</span></div>
+        <div class="chip"><span class="k">Q / inverter at dispatch</span><span class="v" id="outInvQ">—<small>kVAr</small></span></div>
+        <div class="chip"><span class="k">Q for inverters (after cap bank)</span><span class="v" id="outQInv">—<small>MVAr</small></span></div>
       </div>
-      <div class="note">When the Step 5 capability table is in use, the reactive capability comes from its 1.00 Vn row at the dispatched loading. Otherwise, leave <em>Reactive capability</em> blank to derive it from the apparent power and power factor (√(S² − P²)), or enter the manufacturer's value directly. Leave <em>Number of inverters</em> blank to auto-size, or enter the count your plant actually has — every downstream result (delivered power, reactive coverage, the voltage sweep) then uses your numbers, and shortfalls are flagged. A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. (The original worksheet added it to the demand — corrected here.)</div>
+      <div class="note">Reactive capability at the dispatch point comes from the Step 5 capability table (1.00 Vn row) when it is in use; otherwise from the manual kVAr value, or the circle √(S² − P²). A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. More inverters ⇒ lighter loading each ⇒ more reactive headroom — the recommended count is where both requirements are first met.</div>
     </section>
 
     <!-- Step 5: inverter P-Q capability table + diagram -->
@@ -677,7 +669,6 @@ const DEFAULTS = {
   xmerMargin: 10,
   gridCode: { preset: "gb_g99", qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10, vqAsym: true, leadRelief: true },
   invKVA: 363,
-  invPF: 0.918,
   capBank: 0,
   invCountOverride: null,
   invQOverride: null,
@@ -964,40 +955,39 @@ function compute(s) {
   const S_actual = Math.hypot(P_total, Q_total);                   // MVA
 
   const S_inv = num(s.invKVA);                                     // kVA
-  const pf_inv = clamp(num(s.invPF), 0.01, 0.9999);
-  const p_inv = S_inv * pf_inv;                                    // kW
-  const q_derived = Math.sqrt(Math.max(0, S_inv * S_inv - p_inv * p_inv)); // kVAr
   const qo = s.invQOverride;
   const qOvr = qo != null && qo !== "" && num(qo) > 0;
   const pqActive = pqIsActive(s);
-  // capability precedence: P-Q table (at nominal voltage) > manual value > derived
-  let q_inv;
-  if (pqActive) {
-    const cap = qCapAt(s.pq, 1.0, pf_inv);
-    q_inv = cap.allowed ? cap.pct / 100 * S_inv : 0;               // kVAr
-  } else {
-    q_inv = qOvr ? num(qo) : q_derived;                            // kVAr
-  }
-  // a stated Q beyond sqrt(S^2-P^2) implies the machine supports that
-  // operating point; the effective apparent limit scales the fallback sweep
-  const S_eff = !pqActive && qOvr ? Math.max(S_inv, Math.hypot(p_inv, q_inv)) : S_inv;
-
   const Q_capbank = Math.max(0, num(s.capBank));                   // MVAr
   const Q_for_inv = Math.max(0, Q_total - Q_capbank);              // MVAr
-  // auto count must satisfy both the reactive demand and the active delivery
-  // requirement at the chosen PF (identical to the worksheet's reactive-only
-  // count whenever the PF is goal-seeked, e.g. 164 for the Belvior defaults)
-  const N_q = q_inv > 0 ? Math.ceil(Q_for_inv * 1000 / q_inv) : 0;
-  const N_p = p_inv > 0 ? Math.ceil((P + lossSum) * 1000 / p_inv) : 0;
-  const N_req = Math.max(N_q, N_p);
+  const P_req = (P + lossSum) * 1000;                              // kW the fleet must generate
+
+  // dispatch model: each inverter runs the active power actually needed,
+  // (grid limit + losses) / N; the reactive capability follows from that
+  // loading. Recommended N is the smallest count covering both P and Q.
+  const N_rec = recommendN(s, S_inv, P_req, Q_for_inv * 1000);
   const ovr = s.invCountOverride;
   const manualN = ovr != null && ovr !== "" && num(ovr) > 0;
-  const N = manualN ? Math.round(num(ovr)) : N_req;
-  const P_delivered = N * p_inv / 1000 - lossSum;                  // MW at grid
+  const N = manualN ? Math.round(num(ovr)) : N_rec;
+  const p_d = N > 0 ? P_req / N : 0;                               // kW dispatched per inverter
+  const cN = N > 0 ? invQAtDispatch(s, S_inv, p_d) : { q: 0, ok: false };
+  const q_inv = cN.q;                                              // kVAr at dispatch
+  const p_inv = p_d;
+  const pf_inv = S_inv > 0 && N > 0 ? clamp(p_d / S_inv, 0, 1) : 0; // equivalent loading (cos φ)
+  const q_derived = N > 0 ? Math.sqrt(Math.max(0, S_inv * S_inv - Math.min(p_d, S_inv) ** 2)) : 0;
+  // a stated Q beyond the circle implies the machine supports that operating
+  // point; the effective apparent limit scales the fallback voltage sweep
+  const S_eff = !pqActive && qOvr && N > 0 ? Math.max(S_inv, Math.hypot(Math.min(p_d, S_inv), q_inv)) : S_inv;
+
+  // when the dispatch is feasible the plant delivers exactly the grid limit;
+  // otherwise the fleet caps out at its maximum permitted loading
+  const pMaxKW = pqActive ? nomMaxLoadingPu(s.pq) * S_inv : S_inv;
+  const P_delivered = N > 0 ? (cN.ok ? P : Math.min(p_d, pMaxKW) * N / 1000 - lossSum) : 0;
   const Q_compensated = (q_inv * N) / 1000 + Q_capbank;            // MVAr
-  const meetsP = P_delivered >= P - 1e-9 && N > 0;
+  const meetsP = N > 0 && cN.ok;
   const meetsQ = Q_compensated >= Q_total - 1e-9;
   const meets = meetsP && meetsQ;
+  const N_req = N_rec;
 
   return { P, pf, S_plant, Q_grid, xmers, xmerSum, Q_xmer, Q_total,
            losses, lossSum, P_total, S_actual,
@@ -1005,62 +995,38 @@ function compute(s) {
            N_req, manualN, N, P_delivered, Q_compensated, meetsP, meetsQ, meets };
 }
 
-/* Analytic goal seek: the fewest inverters that can carry both the active
-   requirement (grid limit + losses) and the reactive requirement, then the
-   PF band that satisfies both at that count. When the inverter count is
-   fixed by the user, it solves for the PF band at that count instead, and
-   reports infeasibility (with the minimum viable count) if none exists. */
-function goalSeek(s) {
-  const r = compute(s);
-  const P_req = (r.P + r.lossSum) * 1000;          // kW
-  const Q_req = r.Q_for_inv * 1000;                // kVAr
-  const S_inv = r.S_inv;
-  if (S_inv <= 0 || (P_req <= 0 && Q_req <= 0)) return null;
-  if (r.pqActive) {
-    // capability varies with PF through the table — scan numerically
-    const cand = [];
-    for (let k = 5000; k <= 9999; k += 5) {
-      const pf = k / 10000;
-      const cap = qCapAt(s.pq, 1.0, pf);
-      if (!cap.allowed) continue;
-      const q = cap.pct / 100 * S_inv;
-      const Np = Math.ceil(P_req / (S_inv * pf));
-      const Nq = Q_req > 0 ? (q > 0 ? Math.ceil(Q_req / q) : Infinity) : 0;
-      const n = Math.max(1, Np, Nq);
-      if (Number.isFinite(n)) cand.push({ pf, n });
-    }
-    if (!cand.length) return null;
-    const Nmin = cand.reduce((a, c) => Math.min(a, c.n), Infinity);
-    const N = r.manualN ? r.N : Nmin;
-    const feas = cand.filter(c => c.n <= N);
-    if (!feas.length) return { infeasible: true, N, Nmin };
-    const pfMin = feas[0].pf, pfMax = feas[feas.length - 1].pf;
-    const pf = Math.round(((pfMin + pfMax) / 2) * 1e4) / 1e4;
-    return { N, Nmin, fixed: r.manualN, qFixed: true, pfMin, pfMax, pf: clamp(pf, pfMin, pfMax) };
+/* Per-inverter reactive capability (kVAr) at active dispatch p_d (kW) and
+   nominal voltage. ok=false when the dispatch itself is not permitted. */
+function invQAtDispatch(s, S_inv, p_d) {
+  if (S_inv <= 0) return { q: 0, ok: false };
+  if (pqIsActive(s)) {
+    const cap = qCapAt(s.pq, 1.0, p_d / S_inv);
+    return { q: cap.allowed ? cap.pct / 100 * S_inv : 0, ok: cap.allowed };
   }
-  let Nmin;
-  if (r.qOvr) {
-    // fixed manual Q per inverter: reactive and active constraints separate
-    if (r.q_inv <= 0) return null;
-    Nmin = Math.max(1, Math.ceil(Q_req / r.q_inv), Math.ceil(P_req / (S_inv * 0.9999)));
-  } else {
-    Nmin = Math.max(1, Math.ceil(Math.hypot(P_req, Q_req) / S_inv));
+  if (p_d > S_inv + 1e-9) return { q: 0, ok: false };
+  const circ = Math.sqrt(Math.max(0, S_inv * S_inv - p_d * p_d));
+  const qo = s.invQOverride;
+  const qOvr = qo != null && qo !== "" && num(qo) > 0;
+  return { q: qOvr ? num(qo) : circ, ok: true };
+}
+/* Maximum permitted active loading (p.u. of rated kVA) at nominal voltage. */
+function nomMaxLoadingPu(pq) {
+  for (let i = pq.pLevels.length - 1; i >= 0; i--) {
+    if (qCapAt(pq, 1.0, pq.pLevels[i]).allowed) return pq.pLevels[i];
   }
-  const N = r.manualN ? r.N : Nmin;
-  if (N < Nmin) return { infeasible: true, N, Nmin };
-  const NS = N * S_inv;
-  let pfMin, pfMax;
-  if (r.qOvr) {
-    if (P_req / NS > 0.9999 || N * r.q_inv < Q_req - 1e-9) return { infeasible: true, N, Nmin };
-    pfMin = clamp(P_req / NS, 0.01, 0.9999);
-    pfMax = 0.9999; // PF no longer trades against Q — capability is fixed
-  } else {
-    pfMin = clamp(P_req / NS, 0.01, 0.9999);
-    const qRatio = Q_req / NS;
-    pfMax = clamp(Math.sqrt(Math.max(0, 1 - qRatio * qRatio)), pfMin, 0.9999);
+  return 0;
+}
+/* Recommended inverter count: the smallest N whose dispatch — (grid limit +
+   losses) / N per inverter — is permitted AND leaves enough reactive
+   capability to cover the demand. Both requirements together, no PF knob. */
+function recommendN(s, S_inv, P_req_kW, Q_req_kvar) {
+  if (S_inv <= 0 || P_req_kW <= 0) return 0;
+  let N = Math.max(1, Math.ceil(Math.hypot(P_req_kW, Q_req_kvar) / S_inv) - 1);
+  for (let i = 0; i < 5000; i++, N++) {
+    const c = invQAtDispatch(s, S_inv, P_req_kW / N);
+    if (c.ok && N * c.q >= Q_req_kvar - 1e-6) return N;
   }
-  const pf = Math.round(((pfMin + pfMax) / 2) * 1e4) / 1e4;
-  return { N, Nmin, fixed: r.manualN, qFixed: r.qOvr, pfMin, pfMax, pf: clamp(pf, pfMin, pfMax) };
+  return 0; // not achievable with this inverter
 }
 
 /* Voltage sweep: per-inverter apparent power follows the current limit below
@@ -1740,7 +1706,8 @@ function update() {
   setText("outLosses", fmt(r.lossSum, 3), "MW");
   setText("outPTotal", fmt(r.P_total), "MW");
   setText("outInvP", fmt(r.p_inv, 1), "kW");
-  setText("outInvQ", fmt(r.q_inv, 1), r.pqActive ? "kVAr · P–Q table" : r.qOvr ? "kVAr · manual" : "kVAr · derived");
+  setText("outInvPF", fmt(r.pf_inv, 3), "cos φ");
+  setText("outInvQ", fmt(r.q_inv, 1), r.pqActive ? "kVAr · P–Q table" : r.qOvr ? "kVAr · manual" : "kVAr · circle");
   const invQEl = document.getElementById("invQ");
   invQEl.disabled = r.pqActive;
   invQEl.title = r.pqActive ? "Governed by the Step 5 capability table (1.00 Vn row)" : "";
@@ -1752,8 +1719,8 @@ function update() {
     qNote.hidden = true;
   }
   setText("outQInv", fmt(r.Q_for_inv), "MVAr");
-  setText("outNReq", String(r.N_req), "nos.");
-  setText("outNInv", String(r.N), r.manualN ? "nos. · fixed" : "nos. · auto");
+  setText("outNReq", r.N_req > 0 ? String(r.N_req) : "—", "nos.");
+  setText("outNInv", String(r.N), r.manualN ? "nos. · yours" : "nos. · recommended");
 
   document.getElementById("statP").textContent = fmt(r.P_total);
   document.getElementById("statQ").textContent = fmt(r.Q_total);
@@ -1774,7 +1741,7 @@ function update() {
   compMsg.innerHTML = comp.covered
     ? `Compliant: the plant covers the P–Q envelope across the output range and all V–Q corner points at Registered Capacity (Q = ±${fmt(gcQreqPu(state.gridCode, 1, "lag") * r.P, 1)} MVAr at the CP).`
     : (comp.worst
-        ? `Not compliant: worst P–Q shortfall <b>${fmt(comp.worst.short)} MVAr</b> (${comp.worst.dir === "lag" ? "export" : "absorb"}) at <b>${fmt(comp.worst.Ppu * 100, 0)}%</b> output${failedCorners.length ? `; V–Q corner point${failedCorners.length > 1 ? "s" : ""} ${failedCorners.join(", ")} also fail` : ""}. Add a capacitor bank, more inverters, or a lower inverter PF.`
+        ? `Not compliant: worst P–Q shortfall <b>${fmt(comp.worst.short)} MVAr</b> (${comp.worst.dir === "lag" ? "export" : "absorb"}) at <b>${fmt(comp.worst.Ppu * 100, 0)}%</b> output${failedCorners.length ? `; V–Q corner point${failedCorners.length > 1 ? "s" : ""} ${failedCorners.join(", ")} also fail` : ""}. Add more inverters or a capacitor bank.`
         : `Not compliant: V–Q corner point${failedCorners.length > 1 ? "s" : ""} <b>${failedCorners.join(", ")}</b> fail at Registered Capacity — see the Step 7 diagrams.`);
 
   drawPQ(r);
@@ -1812,24 +1779,23 @@ function update() {
   const headroom = r.P_delivered - r.P;
   check.className = "check " + (r.meets ? "good" : "crit");
   icon.textContent = r.meets ? "✓" : "✕";
-  const g = goalSeek(state);
-  const fixedTag = r.manualN ? " (fixed)" : "";
+  const fixedTag = r.manualN ? " (your count)" : " (recommended)";
   if (r.meets) {
     let oversize = "";
-    if (g && !g.infeasible && r.N > g.Nmin) {
-      oversize = ` <span style="color:var(--warn)">Note: the same demand is met with only <b>${g.Nmin}</b> inverters${r.manualN ? "" : ` at cos φ ${fmt(g.pfMin, 4)}–${fmt(g.pfMax, 4)} — run Goal Seek`}.</span>`;
+    if (r.manualN && r.N_req > 0 && r.N > r.N_req) {
+      oversize = ` <span style="color:var(--warn)">Note: the recommended minimum is <b>${r.N_req}</b> inverters — your fleet carries ${fmt((r.N / r.N_req - 1) * 100, 0)}% margin.</span>`;
     }
-    msg.innerHTML = `<b>${r.N}</b> inverters${fixedTag} at cos φ <b>${fmt(r.pf_inv, 4)}</b> deliver <b>${fmt(r.P_delivered)} MW</b> to the grid — meets the ${fmt(r.P)} MW injection limit while compensating <b>${fmt(r.Q_compensated)} MVAr</b>.${oversize}`;
+    msg.innerHTML = `<b>${r.N}</b> inverters${fixedTag} dispatch <b>${fmt(r.p_inv, 1)} kW</b> each (equivalent cos φ ${fmt(r.pf_inv, 3)}), deliver <b>${fmt(r.P_delivered)} MW</b> to the grid and compensate <b>${fmt(r.Q_compensated)} MVAr</b> against the ${fmt(r.Q_total)} MVAr demand.${oversize}`;
   } else {
     const reasons = [];
-    if (!r.meetsP) reasons.push(`delivered power <b>${fmt(r.P_delivered)} MW</b> falls short of the ${fmt(r.P)} MW injection limit`);
+    if (!r.meetsP) reasons.push(`the fleet cannot carry the required dispatch of <b>${fmt(r.p_inv, 1)} kW</b> per inverter — delivered power caps at <b>${fmt(r.P_delivered)} MW</b> vs the ${fmt(r.P)} MW limit`);
     if (!r.meetsQ) reasons.push(`reactive coverage <b>${fmt(r.Q_compensated)} MVAr</b> falls short of the ${fmt(r.Q_total)} MVAr demand`);
-    const advice = g && g.infeasible
-      ? `At cos φ that meets both requirements, at least <b>${g.Nmin}</b> inverters are needed — increase the count or add a capacitor bank.`
-      : `Run Goal Seek to find a power factor that meets both requirements${r.manualN ? " at your fixed count" : ""}.`;
-    msg.innerHTML = `With <b>${r.N}</b> inverters${fixedTag}: ${reasons.join("; ")}. ${advice}`;
+    const advice = r.N_req > 0
+      ? `The recommended count covering both requirements is <b>${r.N_req}</b> inverters; alternatively add a capacitor bank.`
+      : `No inverter count achieves both requirements with this inverter — a capacitor bank or a different inverter is needed.`;
+    msg.innerHTML = `With <b>${r.N}</b> inverters${r.manualN ? " (your count)" : ""}: ${reasons.join("; ")}. ${advice}`;
   }
-  document.getElementById("kvInv").textContent = r.manualN ? `${r.N} (fixed · min ${r.N_req})` : `${r.N} (auto)`;
+  document.getElementById("kvInv").textContent = r.manualN ? `${r.N} (yours · recommended ${r.N_req || "—"})` : `${r.N} (recommended)`;
   document.getElementById("kvDelivered").textContent = fmt(r.P_delivered) + " MW";
   document.getElementById("kvLimit").textContent = fmt(r.P) + " MW";
   document.getElementById("kvHeadroom").textContent = (headroom >= 0 ? "+" : "") + fmt(headroom, 3) + " MW";
@@ -1839,7 +1805,7 @@ function update() {
   pill.className = "pill " + (r.meets ? "good" : "crit");
   document.getElementById("headerPillText").textContent = r.meets
     ? `SIZED — ${r.N} inverters${r.manualN ? " (fixed)" : ""} · ${fmt(r.Q_total)} MVAr`
-    : (r.meetsP ? "REACTIVE SHORTFALL" : "UNDER-DELIVERS") + " — adjust PF or count";
+    : (r.meetsP ? "REACTIVE SHORTFALL" : "UNDER-DELIVERS") + " — adjust inverter count";
 
   save();
 }
@@ -1867,7 +1833,6 @@ bind("powerFactor", "powerFactor");
 bind("pfSense", "pfSense", false);
 bind("xmerMargin", "xmerMargin");
 bind("invKVA", "invKVA");
-bind("invPF", "invPF");
 bind("capBank", "capBank");
 
 /* grid code controls */
@@ -1949,27 +1914,6 @@ document.getElementById("pqUse").addEventListener("change", e => {
   update();
 });
 
-document.getElementById("goalSeek").addEventListener("click", () => {
-  const g = goalSeek(state);
-  const note = document.getElementById("goalSeekNote");
-  note.hidden = false;
-  if (!g) { note.className = "note"; note.textContent = "Goal Seek needs a positive inverter rating and a non-zero requirement."; return; }
-  if (g.infeasible) {
-    note.className = "note";
-    note.innerHTML = `No power factor works with <span class="mono">${g.N}</span> inverters — at least
-      <span class="mono">${g.Nmin}</span> are needed for both requirements. Increase the count
-      (or clear it for auto), or add a capacitor bank.`;
-    return;
-  }
-  state.invPF = g.pf;
-  document.getElementById("invPF").value = g.pf;
-  note.className = "note accent";
-  note.innerHTML = `Goal Seek: ${g.fixed ? `at your fixed <span class="mono">${g.N}</span> inverters (minimum ${g.Nmin})` : `minimum <span class="mono">${g.N}</span> inverters`}. Any cos φ in
-    <span class="mono">${fmt(g.pfMin, 4)} – ${fmt(g.pfMax, 4)}</span> meets both requirements;
-    set to midpoint <span class="mono">${fmt(g.pf, 4)}</span>.`;
-  update();
-});
-
 document.getElementById("btnExport").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
@@ -2000,7 +1944,7 @@ document.getElementById("btnReset").addEventListener("click", () => {
 });
 
 function initAll() {
-  ["projectName","installedDC","gridLimit","powerFactor","pfSense","xmerMargin","invKVA","invPF","capBank"]
+  ["projectName","installedDC","gridLimit","powerFactor","pfSense","xmerMargin","invKVA","capBank"]
     .forEach(id => { document.getElementById(id).value = state[id] ?? ""; });
   if (!Array.isArray(state.voltLevels) || !state.voltLevels.length) state.voltLevels = [...DEFAULTS.voltLevels];
   if (!state.pq || !Array.isArray(state.pq.rows) || !Array.isArray(state.pq.pLevels)) state.pq = structuredClone(DEFAULTS.pq);
