@@ -437,12 +437,12 @@
       </div>
       <div style="display:flex; flex-wrap:wrap; gap:16px; margin-top:14px">
         <figure style="flex:1 1 300px; min-width:280px">
-          <svg id="gcPQ" viewBox="0 0 360 190" role="img" aria-label="Grid code P-Q requirement envelope"></svg>
-          <figcaption>P–Q requirement at the POI (capacitive +, inductive −).</figcaption>
+          <svg id="gcVQ" viewBox="0 0 360 230" role="img" aria-label="Grid code V-Q requirement envelope at Registered Capacity"></svg>
+          <figcaption>Reactive power requirement at the CP — at Registered Capacity.</figcaption>
         </figure>
         <figure style="flex:1 1 300px; min-width:280px">
-          <svg id="gcVQ" viewBox="0 0 360 190" role="img" aria-label="Grid code V-Q requirement profile"></svg>
-          <figcaption>V–Q profile: required Q vs grid voltage (at full output).</figcaption>
+          <svg id="gcPQ" viewBox="0 0 360 230" role="img" aria-label="Grid code P-Q requirement envelope below Registered Capacity"></svg>
+          <figcaption>Reactive power requirement at the CP — below Registered Capacity (grey: DNO-discretion relief; hatched: tolerance band).</figcaption>
         </figure>
       </div>
     </section>
@@ -729,8 +729,8 @@ function load() {
           if (!["pf95rect", "pf90rect"].includes(s.gridCode.preset)) s.gridCode.preset = "custom";
         }
         if (typeof s.gridCode.pFull !== "number") s.gridCode.pFull = s.gridCode.pMin ?? 20;
-        if (s.gridCode.preset === "gb_g99" && s.gridCode.vqAsym === undefined) {
-          Object.assign(s.gridCode, { pFull: 20, vqAsym: true, leadRelief: true });
+        if (s.gridCode.preset === "gb_g99" && (s.gridCode.vqAsym === undefined || s.gridCode.stubPu === undefined)) {
+          Object.assign(s.gridCode, { pFull: 20, vqAsym: true, leadRelief: true, stubPu: 0.05 });
         }
         delete s.datasheet;
         return s;
@@ -799,8 +799,8 @@ const GC_PRESETS = {
     label: "United Kingdom — ENA G99 / GB Grid Code (Type C/D PPM)",
     qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20,
     vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10,
-    vqAsym: true, leadRelief: true,
-    note: "0.95 lead/lag at Registered Capacity (Q = ±0.33 Pmax) from 20% output (G99 §13.5.5, Fig. 13.13/13.14). V-Q is asymmetric: full lagging (export) 0.95–1.00 p.u. tapering to zero at 1.05; full leading (absorb) 1.00–1.05 tapering to zero at 0.95. Lead-side relief triangle 20–50% output at DNO discretion." },
+    vqAsym: true, leadRelief: true, stubPu: 0.05,
+    note: "0.95 lead/lag at Registered Capacity (Q = ±0.33 Pmax) from 20% output (G99 §13.5.5, Fig. 13.13/13.14). V-Q is asymmetric: full lagging (export) 0.95–1.00 p.u. tapering to zero at 1.05; full leading (absorb) 1.00–1.05 tapering to zero at 0.95. Lead-side relief triangle 20–50% output at DNO discretion; ±5% tolerance band below 20%." },
   de_4110: {
     label: "Germany — VDE-AR-N 4110 (medium voltage)",
     qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20,
@@ -1363,62 +1363,109 @@ function chartInks() {
 }
 const MONO = "ui-monospace, Menlo, monospace";
 
+/* Step-1 requirement previews, drawn in the conventions of a G99 study
+   report (Figures 2-1 and 2-2): solid envelope, dashed guide lines to the
+   axis ticks, Consumption (lead) left / Production (lag) right. */
 function drawGCPreviews() {
   const gc = state.gridCode;
   const c = chartInks();
-  const t = gcQmaxPu(gc);
-  // --- P-Q envelope ---
-  {
-    const svg = document.getElementById("gcPQ");
-    svg.innerHTML = "";
-    const W = 360, H = 190, mL = 42, mR = 14, mT = 12, mB = 30;
-    const yMax = Math.max(t, 0.1) * 1.25;
-    const x = p => mL + p * (W - mL - mR);
-    const y = q => H - mB - (q + yMax) / (2 * yMax) * (H - mT - mB);
-    svg.append(svgEl("line", { x1: mL, y1: y(0), x2: W - mR, y2: y(0), stroke: c.grid, "stroke-width": 1 }));
-    [-t, 0, t].forEach(qv => {
-      svg.append(svgEl("text", { x: mL - 6, y: y(qv) + 3.5, "text-anchor": "end", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(qv, 2)));
-    });
-    [0, 0.5, 1].forEach(pv => {
-      svg.append(svgEl("text", { x: x(pv), y: H - mB + 14, "text-anchor": "middle", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(pv, 1)));
-    });
-    svg.append(svgEl("text", { x: W - mR, y: H - 4, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "P (p.u. of Pmax)"));
-    svg.append(svgEl("text", { x: mL - 6, y: mT + 2, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "Q/Pmax"));
-    for (const sgn of [1, -1]) {
-      const pts = [];
-      for (let k = 0; k <= 100; k++) pts.push({ p: k / 100, q: sgn * gcQreqPu(gc, k / 100) });
-      const d = pts.map((d2, i) => `${i ? "L" : "M"} ${x(d2.p).toFixed(1)} ${y(d2.q).toFixed(1)}`).join(" ");
-      svg.append(svgEl("path", { d, fill: "none", stroke: c.accent, "stroke-width": 2, "stroke-linejoin": "round" }));
-    }
-    svg.append(svgEl("text", { x: x(0.98), y: y(t) - 6, "text-anchor": "end", fill: c.accent, "font-size": 9.5, "font-weight": 600, "font-family": MONO }, `±${fmt(t, 3)} pu`));
-  }
-  // --- V-Q profile ---
+  const qm = gcQmaxPu(gc);
+  const dash = { stroke: c.muted, "stroke-width": 0.75, "stroke-dasharray": "3 3" };
+
+  /* --- Figure 2-1 style: V-Q envelope at Registered Capacity --- */
   {
     const svg = document.getElementById("gcVQ");
     svg.innerHTML = "";
-    const W = 360, H = 190, mL = 42, mR = 14, mT = 12, mB = 30;
-    const vLo = Math.min(num(gc.vZeroLo), 0.85) - 0.03, vHi = Math.max(num(gc.vZeroHi), 1.15) + 0.03;
-    const yMax = Math.max(t, 0.1) * 1.25;
-    const x = v => mL + (v - vLo) / (vHi - vLo) * (W - mL - mR);
-    const y = q => H - mB - (q + yMax) / (2 * yMax) * (H - mT - mB);
-    svg.append(svgEl("line", { x1: mL, y1: y(0), x2: W - mR, y2: y(0), stroke: c.grid, "stroke-width": 1 }));
-    [num(gc.vZeroLo), num(gc.vFullLo), 1, num(gc.vFullHi), num(gc.vZeroHi)].forEach(vv => {
-      svg.append(svgEl("text", { x: x(vv), y: H - mB + 14, "text-anchor": "middle", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(vv, 2)));
+    const W = 360, H = 230, mL = 46, mR = 16, mT = 14, mB = 46;
+    const fl = num(gc.vFullLo), fh = num(gc.vFullHi), zl = num(gc.vZeroLo), zh = num(gc.vZeroHi);
+    const vLo = (gc.vqAsym ? fl : zl) - 0.035, vHi = (gc.vqAsym ? fh : zh) + 0.035;
+    const xMax = Math.max(qm, 0.1) * 1.35;
+    const x = q => mL + (q + xMax) / (2 * xMax) * (W - mL - mR);
+    const y = v => H - mB - (v - vLo) / (vHi - vLo) * (H - mT - mB);
+    // axes
+    svg.append(svgEl("line", { x1: mL, y1: mT, x2: mL, y2: H - mB, stroke: c.muted, "stroke-width": 1 }));
+    svg.append(svgEl("line", { x1: mL, y1: H - mB, x2: W - mR, y2: H - mB, stroke: c.muted, "stroke-width": 1 }));
+    svg.append(svgEl("line", { x1: x(0), y1: mT, x2: x(0), y2: H - mB, ...{ stroke: c.grid, "stroke-width": 1 } }));
+    svg.append(svgEl("text", { x: mL + 4, y: mT - 2, fill: c.muted, "font-size": 9 }, "CP Voltage (p.u.)"));
+    // polygon vertices
+    const pts = gc.vqAsym
+      ? [[0, fl], [qm, fl], [qm, 1], [0, fh], [-qm, fh], [-qm, 1]]
+      : [[0, zl], [qm, fl], [qm, fh], [0, zh], [-qm, fh], [-qm, fl]];
+    // dashed guides to every distinct V level and to ±Qmax
+    const vLevels = [...new Set(pts.map(p => p[1]))].sort();
+    vLevels.forEach(v => {
+      svg.append(svgEl("line", { x1: mL, y1: y(v), x2: x(qm), y2: y(v), ...dash }));
+      svg.append(svgEl("text", { x: mL - 5, y: y(v) + 3, "text-anchor": "end", fill: c.muted, "font-size": 9, "font-family": MONO }, v.toFixed(2)));
     });
-    [-t, 0, t].forEach(qv => {
-      svg.append(svgEl("text", { x: mL - 6, y: y(qv) + 3.5, "text-anchor": "end", fill: c.muted, "font-size": 9.5, "font-family": MONO }, fmt(qv, 2)));
+    [-qm, qm].forEach(q => {
+      svg.append(svgEl("line", { x1: x(q), y1: y(Math.max(...vLevels)), x2: x(q), y2: H - mB, ...dash }));
     });
-    svg.append(svgEl("text", { x: W - mR, y: H - 4, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "V (p.u.)"));
-    svg.append(svgEl("text", { x: mL - 6, y: mT + 2, "text-anchor": "end", fill: c.muted, "font-size": 9.5 }, "Q/Pmax"));
-    for (const sgn of [1, -1]) {
-      const pts = [];
-      for (let k = 0; k <= 120; k++) {
-        const v = vLo + (vHi - vLo) * k / 120;
-        pts.push({ v, q: sgn * t * gcVqFactor(gc, v) });
-      }
-      const d = pts.map((d2, i) => `${i ? "L" : "M"} ${x(d2.v).toFixed(1)} ${y(d2.q).toFixed(1)}`).join(" ");
-      svg.append(svgEl("path", { d, fill: "none", stroke: c.accent, "stroke-width": 2, "stroke-linejoin": "round" }));
+    // envelope
+    const d = pts.map(([q, v], i) => `${i ? "L" : "M"} ${x(q).toFixed(1)} ${y(v).toFixed(1)}`).join(" ") + " Z";
+    svg.append(svgEl("path", { d, fill: "none", stroke: c.ink, "stroke-width": 1.75, "stroke-linejoin": "round" }));
+    // x-axis labels: PF at Qmin / unity / PF at Qmax, plus direction words
+    const pfLbl = fmt(num(gc.pfReq), 2);
+    svg.append(svgEl("text", { x: x(-qm), y: H - mB + 13, "text-anchor": "middle", fill: c.ink, "font-size": 9, "font-family": MONO }, `${pfLbl} Qmin`));
+    svg.append(svgEl("text", { x: x(0), y: H - mB + 13, "text-anchor": "middle", fill: c.ink, "font-size": 9, "font-family": MONO }, "1.00"));
+    svg.append(svgEl("text", { x: x(qm), y: H - mB + 13, "text-anchor": "middle", fill: c.ink, "font-size": 9, "font-family": MONO }, `${pfLbl} Qmax`));
+    svg.append(svgEl("text", { x: x(-qm / 2), y: H - mB + 26, "text-anchor": "middle", fill: c.muted, "font-size": 9 }, "Consumption (lead)"));
+    svg.append(svgEl("text", { x: x(qm / 2), y: H - mB + 26, "text-anchor": "middle", fill: c.muted, "font-size": 9 }, "Production (lag)"));
+    svg.append(svgEl("text", { x: W - mR, y: H - mB + 39, "text-anchor": "end", fill: c.muted, "font-size": 9 }, "Power Factor / Q"));
+  }
+
+  /* --- Figure 2-2 style: P-Q envelope below Registered Capacity --- */
+  {
+    const svg = document.getElementById("gcPQ");
+    svg.innerHTML = "";
+    const W = 360, H = 230, mL = 46, mR = 16, mT = 14, mB = 46;
+    const pMin = num(gc.pMin) / 100;
+    const pFull = Math.max(num(gc.pFull) / 100, pMin);
+    const xMax = Math.max(qm, 0.1) * 1.35;
+    const x = q => mL + (q + xMax) / (2 * xMax) * (W - mL - mR);
+    const y = p => H - mB - p / 1.08 * (H - mT - mB);
+    // axes
+    svg.append(svgEl("line", { x1: mL, y1: mT, x2: mL, y2: H - mB, stroke: c.muted, "stroke-width": 1 }));
+    svg.append(svgEl("line", { x1: mL, y1: H - mB, x2: W - mR, y2: H - mB, stroke: c.muted, "stroke-width": 1 }));
+    svg.append(svgEl("line", { x1: x(0), y1: mT, x2: x(0), y2: H - mB, stroke: c.grid, "stroke-width": 1 }));
+    svg.append(svgEl("text", { x: mL + 4, y: mT - 2, fill: c.muted, "font-size": 9 }, "Power (p.u.)"));
+    // dashed guides at the envelope's P levels
+    const pLevels = [...new Set([pMin, gc.leadRelief ? 0.5 : null, pFull > pMin ? pFull : null, 1].filter(v => v != null && v > 0))].sort();
+    pLevels.forEach(p => {
+      svg.append(svgEl("line", { x1: mL, y1: y(p), x2: x(qm), y2: y(p), ...dash }));
+      svg.append(svgEl("text", { x: mL - 5, y: y(p) + 3, "text-anchor": "end", fill: c.muted, "font-size": 9, "font-family": MONO }, p.toFixed(1)));
+    });
+    // grey DNO-discretion relief triangle on the lead side
+    if (gc.leadRelief && pMin < 0.5) {
+      const qLo = gcQreqPu(gc, pMin, "lead");
+      const tri = [[-qm, 0.5], [-qm, pMin], [-qLo, pMin]];
+      svg.append(svgEl("path", { d: tri.map(([q, p], i) => `${i ? "L" : "M"} ${x(q).toFixed(1)} ${y(p).toFixed(1)}`).join(" ") + " Z", fill: c.muted, "fill-opacity": 0.3, stroke: "none" }));
     }
+    // hatched tolerance stub below the threshold
+    const stub = num(gc.stubPu);
+    if (stub > 0 && pMin > 0) {
+      const defs = svgEl("defs", {});
+      const pattern = svgEl("pattern", { id: "gcHatch", width: 5, height: 5, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
+      pattern.append(svgEl("line", { x1: 0, y1: 0, x2: 0, y2: 5, stroke: c.muted, "stroke-width": 1.25 }));
+      defs.append(pattern);
+      svg.append(defs);
+      svg.append(svgEl("rect", { x: x(-stub), y: y(pMin), width: x(stub) - x(-stub), height: y(0) - y(pMin), fill: "url(#gcHatch)", stroke: c.muted, "stroke-width": 0.75 }));
+    }
+    // envelope: right boundary (lag) up from pMin, across the top, left (lead) down
+    const seg = [];
+    for (let k = Math.round(pMin * 100); k <= 100; k++) seg.push(k / 100);
+    const right = seg.map((p, i) => `${i ? "L" : "M"} ${x(gcQreqPu(gc, p, "lag")).toFixed(1)} ${y(p).toFixed(1)}`).join(" ");
+    const left = [...seg].reverse().map(p => `L ${x(-gcQreqPu(gc, p, "lead")).toFixed(1)} ${y(p).toFixed(1)}`).join(" ");
+    svg.append(svgEl("path", { d: `${right} ${left} Z`, fill: "none", stroke: c.ink, "stroke-width": 1.75, "stroke-linejoin": "round" }));
+    // x labels
+    svg.append(svgEl("text", { x: x(-qm), y: H - mB + 13, "text-anchor": "middle", fill: c.ink, "font-size": 9, "font-family": MONO }, fmt(-qm, 2)));
+    if (gc.leadRelief && pMin < 0.5) {
+      const qLo = gcQreqPu(gc, pMin, "lead");
+      svg.append(svgEl("text", { x: x(-qLo), y: H - mB + 13, "text-anchor": "middle", fill: c.muted, "font-size": 8.5, "font-family": MONO }, fmt(-qLo, 2)));
+    }
+    svg.append(svgEl("text", { x: x(qm), y: H - mB + 13, "text-anchor": "middle", fill: c.ink, "font-size": 9, "font-family": MONO }, fmt(qm, 2)));
+    svg.append(svgEl("text", { x: x(-qm / 2), y: H - mB + 26, "text-anchor": "middle", fill: c.muted, "font-size": 9 }, "Consumption (lead)"));
+    svg.append(svgEl("text", { x: x(qm / 2), y: H - mB + 26, "text-anchor": "middle", fill: c.muted, "font-size": 9 }, "Production (lag)"));
+    svg.append(svgEl("text", { x: W - mR, y: H - mB + 39, "text-anchor": "end", fill: c.muted, "font-size": 9 }, "Q/Pmax"));
   }
 }
 
@@ -1531,9 +1578,10 @@ function drawPQDiagram(r, comp) {
     above.map((d, i) => `${i ? "L" : "M"} ${x(d.reqLag).toFixed(1)} ${y(d.Ppu * RC).toFixed(1)}`).join(" ") +
     " " + [...above].reverse().map(d => `L ${x(-d.reqLead).toFixed(1)} ${y(d.Ppu * RC).toFixed(1)}`).join(" ") + " Z";
   svg.append(svgEl("path", { d: reqPath, fill: "none", stroke: c.ink, "stroke-width": 1.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
-  // ±5% stub below the threshold (tolerance band, no voltage regulation)
-  if (pMin > 0) {
-    const stub = 0.05 * RC;
+  // tolerance stub below the threshold (no voltage regulation required)
+  const stubPu = num(gc.stubPu);
+  if (stubPu > 0 && pMin > 0) {
+    const stub = stubPu * RC;
     for (const sgn of [1, -1]) {
       svg.append(svgEl("line", { x1: x(sgn * stub), y1: y(0), x2: x(sgn * stub), y2: y(pMin * RC), stroke: c.ink, "stroke-width": 1, "stroke-dasharray": "2 3" }));
     }
