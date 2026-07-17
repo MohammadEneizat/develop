@@ -8,7 +8,11 @@ Type C load-flow and reactive power study.
 
 **Run it:** open `index.html` in any browser. It is fully self-contained —
 no build step, no dependencies, works offline. Inputs autosave in the browser;
-scenarios can be exported/imported as JSON.
+scenarios can be exported/imported as JSON, and two complete examples are
+built in: **Belvior** (the original worksheet) and **Brecks Solar Farm** (the
+public values of a real G99 Type C study — 32.7 MW RC, 106 × 352 kVA
+inverters with their Q(t) capability table; impedances and losses are
+typical assumptions).
 
 ## Workflow
 

@@ -655,7 +655,13 @@
         <button id="btnExport" type="button">Export JSON</button>
         <button id="btnImport" type="button">Import JSON</button>
         <button id="btnPrint" type="button">Generate PDF report</button>
-        <button id="btnReset" type="button">Reset to Belvior defaults</button>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; align-items:center">
+        <div class="inwrap" style="flex:1; min-width:210px"><select id="exampleSelect">
+          <option value="belvior">Example: Belvior (worksheet defaults)</option>
+          <option value="brecks">Example: Brecks Solar Farm (G99 study)</option>
+        </select></div>
+        <button id="btnReset" type="button">Load example</button>
       </div>
       <input id="fileImport" type="file" accept="application/json" hidden>
       <div class="note" style="margin-top:12px">Inputs autosave in this browser. Export a JSON file to archive or share a scenario. <em>Generate PDF report</em> opens a print-ready study document — choose “Save as PDF” in the print dialog.</div>
@@ -670,7 +676,7 @@
 /* ---------- defaults (from the Belvior worksheet) ---------- */
 const DEFAULTS = {
   projectName: "Belvior",
-  installedDC: null,
+  installedDC: 66,
   gridLimit: 52.8,
   powerFactor: 0.95,
   pfSense: "Leading",
@@ -708,6 +714,43 @@ const DEFAULTS = {
     { name: "Miscellaneous losses", pct: 1.0 },
   ],
 };
+
+/* Complete example scenarios. "brecks" carries the public values of the
+   Brecks Solar Farm G99 Type C study (RC 32.7 MW, 106 × 352 kVA Sungrow
+   inverters with their Q(t) capability table, aux transformer 100 kVA);
+   transformer impedances, losses and DC ratio are typical assumptions. */
+function exampleScenario(key) {
+  if (key === "brecks") {
+    const s = structuredClone(DEFAULTS);
+    Object.assign(s, {
+      projectName: "Brecks Solar Farm",
+      installedDC: 40,
+      gridLimit: 32.7,
+      powerFactor: 0.95,
+      pfSense: "Leading",
+      xmerMargin: 10,
+      invKVA: 352,
+      invPF: 0.9025,
+      capBank: 0,
+      invCountOverride: 106,
+      invQOverride: null,
+      xmers: [
+        { name: "MV station transformers (7040 kVA)", qty: 2, rating: 7040, z: 7 },
+        { name: "MV station transformers (9860 kVA)", qty: 3, rating: 9860, z: 7 },
+        { name: "Auxiliary transformer", qty: 1, rating: 100, z: 4 },
+      ],
+      losses: [
+        { name: "AC cable loss", pct: 0.7 },
+        { name: "Auxiliary system loss", pct: 0.5 },
+        { name: "33 kV export cable loss (4.2 km)", pct: 0.3 },
+        { name: "Miscellaneous losses", pct: 0.3 },
+      ],
+    });
+    s.gridCode = structuredClone(DEFAULTS.gridCode); // ENA G99 Type C/D
+    return s;
+  }
+  return structuredClone(DEFAULTS); // Belvior worksheet
+}
 
 const STORE_KEY = "rpc-sizing-v1";
 let state = load();
@@ -2283,8 +2326,10 @@ ${verdictTxt === "COMPLIANT"
   w.document.close();
 }
 document.getElementById("btnReset").addEventListener("click", () => {
-  if (!confirm("Replace all current inputs with the Belvior worksheet defaults?")) return;
-  state = structuredClone(DEFAULTS);
+  const key = document.getElementById("exampleSelect").value;
+  const name = key === "brecks" ? "Brecks Solar Farm (G99 study)" : "Belvior (worksheet defaults)";
+  if (!confirm(`Replace all current inputs with the ${name} example?`)) return;
+  state = exampleScenario(key);
   initAll();
 });
 
