@@ -1214,33 +1214,27 @@ function drawTriangle(r) {
   const x0 = mL, y0 = H - mB, x1 = x0 + px, y1 = y0 - qy;
   const phi = Math.atan2(Q, P) * 180 / Math.PI;
 
-  const el = (tag, attrs, text) => {
-    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
-    if (text != null) e.textContent = text;
-    return e;
-  };
   svg.innerHTML = "";
   // faint grid baseline
-  svg.append(el("line", { x1: x0 - 8, y1: y0, x2: W - 12, y2: y0, stroke: cGrid, "stroke-width": 1 }));
+  svg.append(svgEl("line", { x1: x0 - 8, y1: y0, x2: W - 12, y2: y0, stroke: cGrid, "stroke-width": 1 }));
   // angle arc
   const arcR = Math.min(46, px * 0.45);
   const ax = x0 + arcR * Math.cos(-phi * Math.PI / 180);
   const ay = y0 + arcR * Math.sin(-phi * Math.PI / 180);
-  svg.append(el("path", { d: `M ${x0 + arcR} ${y0} A ${arcR} ${arcR} 0 0 0 ${ax} ${ay}`, fill: "none", stroke: cMuted, "stroke-width": 1.25 }));
-  svg.append(el("text", { x: x0 + arcR + 8, y: y0 - 8, fill: cMuted, "font-size": 10.5, "font-family": "ui-monospace, monospace" }, `φ = ${fmt(phi, 1)}°`));
+  svg.append(svgEl("path", { d: `M ${x0 + arcR} ${y0} A ${arcR} ${arcR} 0 0 0 ${ax} ${ay}`, fill: "none", stroke: cMuted, "stroke-width": 1.25 }));
+  svg.append(svgEl("text", { x: x0 + arcR + 8, y: y0 - 8, fill: cMuted, "font-size": 10.5, "font-family": "ui-monospace, monospace" }, `φ = ${fmt(phi, 1)}°`));
   // P
-  svg.append(el("line", { x1: x0, y1: y0, x2: x1, y2: y0, stroke: cP, "stroke-width": 3, "stroke-linecap": "round" }));
-  svg.append(el("text", { x: x0 + px / 2, y: y0 + 17, fill: cP, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `P ${fmt(r.P_total)} MW`));
+  svg.append(svgEl("line", { x1: x0, y1: y0, x2: x1, y2: y0, stroke: cP, "stroke-width": 3, "stroke-linecap": "round" }));
+  svg.append(svgEl("text", { x: x0 + px / 2, y: y0 + 17, fill: cP, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `P ${fmt(r.P_total)} MW`));
   // Q
-  svg.append(el("line", { x1: x1, y1: y0, x2: x1, y2: y1, stroke: cQ, "stroke-width": 3, "stroke-linecap": "round" }));
-  const qLbl = el("text", { x: x1 + 8, y: y0 - qy / 2 + 4, fill: cQ, "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" });
-  qLbl.append(el("tspan", { x: x1 + 8, dy: 0 }, `Q ${fmt(r.Q_total)}`));
-  qLbl.append(el("tspan", { x: x1 + 8, dy: 13 }, "MVAr"));
+  svg.append(svgEl("line", { x1: x1, y1: y0, x2: x1, y2: y1, stroke: cQ, "stroke-width": 3, "stroke-linecap": "round" }));
+  const qLbl = svgEl("text", { x: x1 + 8, y: y0 - qy / 2 + 4, fill: cQ, "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" });
+  qLbl.append(svgEl("tspan", { x: x1 + 8, dy: 0 }, `Q ${fmt(r.Q_total)}`));
+  qLbl.append(svgEl("tspan", { x: x1 + 8, dy: 13 }, "MVAr"));
   svg.append(qLbl);
   // S
-  svg.append(el("line", { x1: x0, y1: y0, x2: x1, y2: y1, stroke: cInk, "stroke-width": 2, "stroke-dasharray": "6 4", "stroke-linecap": "round" }));
-  svg.append(el("text", { x: x0 + px / 2 - 8, y: y1 + (y0 - y1) / 2 - 10, fill: cInk, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `S ${fmt(r.S_actual)} MVA`));
+  svg.append(svgEl("line", { x1: x0, y1: y0, x2: x1, y2: y1, stroke: cInk, "stroke-width": 2, "stroke-dasharray": "6 4", "stroke-linecap": "round" }));
+  svg.append(svgEl("text", { x: x0 + px / 2 - 8, y: y1 + (y0 - y1) / 2 - 10, fill: cInk, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `S ${fmt(r.S_actual)} MVA`));
 }
 
 /* ---------- P-Q capability grid & diagram ---------- */
@@ -1288,12 +1282,6 @@ function drawPQ(r) {
   const cGrid = css.getPropertyValue("--grid").trim();
   const cSurface = css.getPropertyValue("--surface").trim();
   const mono = "ui-monospace, Menlo, monospace";
-  const el = (tag, attrs, text) => {
-    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
-    if (text != null) e.textContent = text;
-    return e;
-  };
   svg.innerHTML = "";
   const pq = state.pq, S = r.S_inv;
   const rows = (pq.rows || []).filter(rw => rw.v !== "" && Number.isFinite(num(rw.v)) && rw.q.some(x => x != null && x !== ""));
@@ -1318,23 +1306,23 @@ function drawPQ(r) {
   // grid + axes
   for (let i = 0; i <= 4; i++) {
     const pv = yMax / 4 * i, yy = y(pv);
-    svg.append(el("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
-    svg.append(el("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(pv, 0)));
+    svg.append(svgEl("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
+    svg.append(svgEl("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(pv, 0)));
   }
   const xstep = xMax > 400 ? 200 : xMax > 200 ? 100 : xMax > 80 ? 50 : 20;
   for (let qv = 0; qv <= xMax; qv += xstep) {
     for (const sgn of qv === 0 ? [1] : [1, -1]) {
       const xx = x(sgn * qv);
-      svg.append(el("line", { x1: xx, y1: H - mB, x2: xx, y2: H - mB + 4, stroke: cMuted, "stroke-width": 1 }));
-      svg.append(el("text", { x: xx, y: H - mB + 16, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(sgn * qv, 0)));
+      svg.append(svgEl("line", { x1: xx, y1: H - mB, x2: xx, y2: H - mB + 4, stroke: cMuted, "stroke-width": 1 }));
+      svg.append(svgEl("text", { x: xx, y: H - mB + 16, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(sgn * qv, 0)));
     }
   }
-  svg.append(el("line", { x1: mL, y1: H - mB, x2: W - mR, y2: H - mB, stroke: cMuted, "stroke-width": 1.25 }));
-  svg.append(el("line", { x1: x(0), y1: mT - 4, x2: x(0), y2: H - mB, stroke: cGrid, "stroke-width": 1.25 }));
-  svg.append(el("text", { x: x(0) + 6, y: mT + 4, fill: cMuted, "font-size": 10.5 }, "P (kW)"));
-  svg.append(el("text", { x: W - mR, y: H - 8, "text-anchor": "end", fill: cMuted, "font-size": 10.5 }, "Q (kVAr)"));
-  svg.append(el("text", { x: mL, y: H - 8, fill: cMuted, "font-size": 10 }, "◀ Inductive"));
-  svg.append(el("text", { x: W - mR, y: H - 22, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "Capacitive ▶"));
+  svg.append(svgEl("line", { x1: mL, y1: H - mB, x2: W - mR, y2: H - mB, stroke: cMuted, "stroke-width": 1.25 }));
+  svg.append(svgEl("line", { x1: x(0), y1: mT - 4, x2: x(0), y2: H - mB, stroke: cGrid, "stroke-width": 1.25 }));
+  svg.append(svgEl("text", { x: x(0) + 6, y: mT + 4, fill: cMuted, "font-size": 10.5 }, "P (kW)"));
+  svg.append(svgEl("text", { x: W - mR, y: H - 8, "text-anchor": "end", fill: cMuted, "font-size": 10.5 }, "Q (kVAr)"));
+  svg.append(svgEl("text", { x: mL, y: H - 8, fill: cMuted, "font-size": 10 }, "◀ Inductive"));
+  svg.append(svgEl("text", { x: W - mR, y: H - 22, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "Capacitive ▶"));
 
   // capability curves (symmetric ± Q), sampled densely over loading
   groups.forEach((g, gi) => {
@@ -1348,21 +1336,21 @@ function drawPQ(r) {
     if (!pts.length) return;
     const left = pts.map((d, i) => `${i ? "L" : "M"} ${x(-d.q).toFixed(1)} ${y(d.p).toFixed(1)}`).join(" ");
     const right = [...pts].reverse().map(d => `L ${x(d.q).toFixed(1)} ${y(d.p).toFixed(1)}`).join(" ");
-    svg.append(el("path", { d: `${left} ${right}`, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    svg.append(svgEl("path", { d: `${left} ${right}`, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
     // legend
     const ly = mT + 14 + gi * 20;
-    svg.append(el("line", { x1: W - mR + 14, y1: ly - 4, x2: W - mR + 34, y2: ly - 4, stroke: color, "stroke-width": 2.5, "stroke-linecap": "round" }));
-    svg.append(el("text", { x: W - mR + 40, y: ly, fill: cInk2, "font-size": 10.5, "font-family": mono },
+    svg.append(svgEl("line", { x1: W - mR + 14, y1: ly - 4, x2: W - mR + 34, y2: ly - 4, stroke: color, "stroke-width": 2.5, "stroke-linecap": "round" }));
+    svg.append(svgEl("text", { x: W - mR + 40, y: ly, fill: cInk2, "font-size": 10.5, "font-family": mono },
       g.vs.map(v => v.toFixed(2)).join("/") + " Vn"));
   });
 
   // design operating point: Q each inverter must supply at its dispatched P
   const qOp = r.N > 0 ? r.Q_for_inv * 1000 / r.N : 0;
   if (r.N > 0 && r.p_inv > 0) {
-    svg.append(el("line", { x1: x(qOp), y1: y(r.p_inv), x2: x(qOp), y2: H - mB, stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
-    svg.append(el("line", { x1: x(0), y1: y(r.p_inv), x2: x(qOp), y2: y(r.p_inv), stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
-    svg.append(el("circle", { cx: x(qOp), cy: y(r.p_inv), r: 5, fill: cInk, stroke: cSurface, "stroke-width": 2 }));
-    svg.append(el("text", { x: x(qOp) + 9, y: y(r.p_inv) - 8, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "operating point"));
+    svg.append(svgEl("line", { x1: x(qOp), y1: y(r.p_inv), x2: x(qOp), y2: H - mB, stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
+    svg.append(svgEl("line", { x1: x(0), y1: y(r.p_inv), x2: x(qOp), y2: y(r.p_inv), stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
+    svg.append(svgEl("circle", { cx: x(qOp), cy: y(r.p_inv), r: 5, fill: cInk, stroke: cSurface, "stroke-width": 2 }));
+    svg.append(svgEl("text", { x: x(qOp) + 9, y: y(r.p_inv) - 8, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "operating point"));
   }
 
   // coordinate readout on hover
@@ -1676,12 +1664,6 @@ function drawVChart(rows, r) {
   const cCrit = css.getPropertyValue("--crit").trim();
   const cSurface = css.getPropertyValue("--surface").trim();
 
-  const el = (tag, attrs, text) => {
-    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
-    if (text != null) e.textContent = text;
-    return e;
-  };
   svg.innerHTML = "";
   tip.style.display = "none";
   if (!rows.length) return;
@@ -1697,40 +1679,40 @@ function drawVChart(rows, r) {
   const ticks = 4;
   for (let i = 0; i <= ticks; i++) {
     const qv = yMax / ticks * i, yy = y(qv);
-    svg.append(el("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
-    svg.append(el("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(qv, 1)));
+    svg.append(svgEl("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
+    svg.append(svgEl("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(qv, 1)));
   }
-  svg.append(el("text", { x: mL - 8, y: mT - 14, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "MVAr"));
+  svg.append(svgEl("text", { x: mL - 8, y: mT - 14, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "MVAr"));
   // x-axis ticks
   rows.forEach(d => {
-    svg.append(el("text", { x: x(d.V), y: H - mB + 17, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(d.V, 2)));
+    svg.append(svgEl("text", { x: x(d.V), y: H - mB + 17, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(d.V, 2)));
   });
-  svg.append(el("text", { x: (mL + W - mR) / 2, y: H - 5, "text-anchor": "middle", fill: cMuted, "font-size": 10.5 }, "Grid voltage (p.u.)"));
+  svg.append(svgEl("text", { x: (mL + W - mR) / 2, y: H - 5, "text-anchor": "middle", fill: cMuted, "font-size": 10.5 }, "Grid voltage (p.u.)"));
 
   // requirement curve: grid-code Q tapered by voltage, plus transformer consumption
   const reqPath = rows.map((d, i) => `${i ? "L" : "M"} ${x(d.V).toFixed(1)} ${y(d.req).toFixed(1)}`).join(" ");
-  svg.append(el("path", { d: reqPath, fill: "none", stroke: cInk, "stroke-width": 1.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
+  svg.append(svgEl("path", { d: reqPath, fill: "none", stroke: cInk, "stroke-width": 1.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
   const yReq = y(rows[rows.length - 1].req);
-  const refLbl = el("text", { x: W - mR + 8, y: yReq + 3.5, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono });
-  refLbl.append(el("tspan", { x: W - mR + 8, dy: 0 }, `required Q`));
-  refLbl.append(el("tspan", { x: W - mR + 8, dy: 12 }, `(grid code)`));
+  const refLbl = svgEl("text", { x: W - mR + 8, y: yReq + 3.5, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono });
+  refLbl.append(svgEl("tspan", { x: W - mR + 8, dy: 0 }, `required Q`));
+  refLbl.append(svgEl("tspan", { x: W - mR + 8, dy: 12 }, `(grid code)`));
   svg.append(refLbl);
 
   // capability line
   const path = rows.map((d, i) => `${i ? "L" : "M"} ${x(d.V).toFixed(1)} ${y(d.Q_plant).toFixed(1)}`).join(" ");
-  svg.append(el("path", { d: path, fill: "none", stroke: cLine, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  svg.append(svgEl("path", { d: path, fill: "none", stroke: cLine, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
   const last = rows[rows.length - 1];
   const yCap = y(last.Q_plant);
   // the reference label occupies yReq..yReq+12; dodge above the line on collision
   const capLblY = (yCap > yReq - 26 && yCap < yReq + 24) ? yReq - 12 : yCap + 3.5;
-  svg.append(el("text", { x: W - mR + 8, y: capLblY, fill: cLine, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "capability"));
+  svg.append(svgEl("text", { x: W - mR + 8, y: capLblY, fill: cLine, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "capability"));
 
   // points + hover targets
   const cWarn = getComputedStyle(document.documentElement).getPropertyValue("--warn").trim();
   rows.forEach(d => {
     const fill = !d.ok ? cCrit : d.curtailed ? cWarn : cLine;
-    svg.append(el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 4.5, fill, stroke: cSurface, "stroke-width": 2 }));
-    const hit = el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 14, fill: "transparent", cursor: "pointer" });
+    svg.append(svgEl("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 4.5, fill, stroke: cSurface, "stroke-width": 2 }));
+    const hit = svgEl("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 14, fill: "transparent", cursor: "pointer" });
     hit.addEventListener("mouseenter", () => {
       tip.innerHTML = `<span class="t">${fmt(d.V, 2)} p.u.</span><br>Q capability ${fmt(d.Q_plant)} MVAr<br>required ${fmt(d.req)} MVAr<br>` +
         `margin ${(d.margin >= 0 ? "+" : "")}${fmt(d.margin)} MVAr` +
