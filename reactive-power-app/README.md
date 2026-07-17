@@ -126,4 +126,12 @@ apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
 - **Visuals** — a live power triangle (P/Q/S with φ) and a reactive-demand
   breakdown chart.
 - **Scenarios** — inputs autosave in the browser; export/import JSON to archive
-  or share; print-ready report layout; light and dark themes.
+  or share; light and dark themes.
+- **PDF study report** — one click composes a print-ready, professional study
+  document in a new window (cover page with project metadata and scope note,
+  executive summary, inputs & assumptions, grid-code requirement figures,
+  sizing results with power triangle, inverter capability, voltage sweep,
+  V-Q/P-Q compliance diagrams with corner-point table, verdict and
+  conclusion — all numbered tables and vector figures). Charts are captured
+  in light theme regardless of the app theme; the browser's "Save as PDF"
+  produces the file.
