@@ -574,12 +574,12 @@
       <div class="rowscroll">
         <table class="vtable" id="vtable">
           <thead>
-            <tr><th>Voltage (p.u.)</th><th>P / inverter (kW)</th><th>Q / inverter (kVAr)</th><th>Plant Q capability (MVAr)</th><th>Achievable P (MW)</th><th>Required Q (MVAr)</th><th>Margin (MVAr)</th><th>Status</th></tr>
+            <tr><th>Voltage (p.u.)</th><th>S / inverter (kVA)</th><th>Q / inverter (kVAr)</th><th>Plant Q capability (MVAr)</th><th>Required (MVAr)</th><th>Margin (MVAr)</th><th>Status</th></tr>
           </thead>
           <tbody></tbody>
         </table>
       </div>
-      <div class="note">Inverters are dispatched at the active power actually needed to deliver the grid limit — (limit + losses) ÷ count — as in a G99 study, so surplus inverters free reactive headroom. Where the capability table does not permit that loading at a voltage, active power is backed off to the maximum permitted point and the reactive capability there is used — the row then shows the reduced achievable P with a ⚠ and an amber status.</div>
+      <div class="note">Inverters are dispatched at the active power actually needed to deliver the grid limit — (limit + losses) ÷ count — as in a G99 study, so surplus inverters free reactive headroom. If even that dispatch exceeds the capability at a voltage, the point is flagged as curtailed.</div>
     </section>
 
     <!-- Step 7 -->
@@ -654,17 +654,11 @@
       <div class="actions">
         <button id="btnExport" type="button">Export JSON</button>
         <button id="btnImport" type="button">Import JSON</button>
-        <button id="btnPrint" type="button">Generate PDF report</button>
-      </div>
-      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; align-items:center">
-        <div class="inwrap" style="flex:1; min-width:210px"><select id="exampleSelect">
-          <option value="belvior">Example: Belvior (worksheet defaults)</option>
-          <option value="brecks">Example: Brecks Solar Farm (G99 study)</option>
-        </select></div>
-        <button id="btnReset" type="button">Load example</button>
+        <button id="btnPrint" type="button">Print report</button>
+        <button id="btnReset" type="button">Reset to Belvior defaults</button>
       </div>
       <input id="fileImport" type="file" accept="application/json" hidden>
-      <div class="note" style="margin-top:12px">Inputs autosave in this browser. Export a JSON file to archive or share a scenario. <em>Generate PDF report</em> opens a print-ready study document — choose “Save as PDF” in the print dialog.</div>
+      <div class="note" style="margin-top:12px">Inputs autosave in this browser. Export a JSON file to archive or share a scenario.</div>
     </section>
 
   </aside>
@@ -676,7 +670,7 @@
 /* ---------- defaults (from the Belvior worksheet) ---------- */
 const DEFAULTS = {
   projectName: "Belvior",
-  installedDC: 66,
+  installedDC: null,
   gridLimit: 52.8,
   powerFactor: 0.95,
   pfSense: "Leading",
@@ -714,43 +708,6 @@ const DEFAULTS = {
     { name: "Miscellaneous losses", pct: 1.0 },
   ],
 };
-
-/* Complete example scenarios. "brecks" carries the public values of the
-   Brecks Solar Farm G99 Type C study (RC 32.7 MW, 106 × 352 kVA Sungrow
-   inverters with their Q(t) capability table, aux transformer 100 kVA);
-   transformer impedances, losses and DC ratio are typical assumptions. */
-function exampleScenario(key) {
-  if (key === "brecks") {
-    const s = structuredClone(DEFAULTS);
-    Object.assign(s, {
-      projectName: "Brecks Solar Farm",
-      installedDC: 40,
-      gridLimit: 32.7,
-      powerFactor: 0.95,
-      pfSense: "Leading",
-      xmerMargin: 10,
-      invKVA: 352,
-      invPF: 0.9025,
-      capBank: 0,
-      invCountOverride: 106,
-      invQOverride: null,
-      xmers: [
-        { name: "MV station transformers (7040 kVA)", qty: 2, rating: 7040, z: 7 },
-        { name: "MV station transformers (9860 kVA)", qty: 3, rating: 9860, z: 7 },
-        { name: "Auxiliary transformer", qty: 1, rating: 100, z: 4 },
-      ],
-      losses: [
-        { name: "AC cable loss", pct: 0.7 },
-        { name: "Auxiliary system loss", pct: 0.5 },
-        { name: "33 kV export cable loss (4.2 km)", pct: 0.3 },
-        { name: "Miscellaneous losses", pct: 0.3 },
-      ],
-    });
-    s.gridCode = structuredClone(DEFAULTS.gridCode); // ENA G99 Type C/D
-    return s;
-  }
-  return structuredClone(DEFAULTS); // Belvior worksheet
-}
 
 const STORE_KEY = "rpc-sizing-v1";
 let state = load();
@@ -825,42 +782,6 @@ function qCapAt(pq, vPu, pPu) {
     }
   }
   return { pct: 0, allowed: false };
-}
-function rowMaxP(row, pLevels) {
-  let m = -1;
-  for (let i = 0; i < pLevels.length; i++) if (row.q[i] != null && row.q[i] !== "") m = i;
-  return m < 0 ? 0 : pLevels[m];
-}
-/* Maximum permitted active loading (p.u. of rated kVA) at voltage vPu —
-   conservative minimum of the bracketing rows when between table rows. */
-function tableMaxP(pq, vPu) {
-  const rows = (pq.rows || []).filter(r => Number.isFinite(num(r.v)) && r.q.some(x => x != null && x !== ""))
-    .slice().sort((a, b) => num(a.v) - num(b.v));
-  if (!rows.length) return 0;
-  if (vPu <= num(rows[0].v)) return rowMaxP(rows[0], pq.pLevels);
-  if (vPu >= num(rows[rows.length - 1].v)) return rowMaxP(rows[rows.length - 1], pq.pLevels);
-  for (let i = 1; i < rows.length; i++) {
-    if (vPu <= num(rows[i].v) + 1e-9) {
-      const t = (vPu - num(rows[i - 1].v)) / (num(rows[i].v) - num(rows[i - 1].v));
-      if (t >= 1 - 1e-6) return rowMaxP(rows[i], pq.pLevels);
-      if (t <= 1e-6) return rowMaxP(rows[i - 1], pq.pLevels);
-      return Math.min(rowMaxP(rows[i - 1], pq.pLevels), rowMaxP(rows[i], pq.pLevels));
-    }
-  }
-  return 0;
-}
-/* Capability with P-priority relaxed: if the requested loading is not
-   permitted at this voltage, the inverter backs its active power off to the
-   maximum permitted loading and still provides the reactive capability
-   there — reported as curtailedP with the loading actually used. */
-function qCapClamped(pq, vPu, pPu) {
-  const direct = qCapAt(pq, vPu, pPu);
-  if (direct.allowed) return { pct: direct.pct, pUsed: pPu, curtailedP: false };
-  const maxP = tableMaxP(pq, vPu);
-  if (maxP <= 0) return { pct: 0, pUsed: 0, curtailedP: true };
-  const pUsed = Math.min(pPu, maxP);
-  const at = qCapAt(pq, vPu, pUsed);
-  return { pct: at.allowed ? at.pct : 0, pUsed, curtailedP: pPu > maxP + 1e-9 };
 }
 function pqIsActive(s) {
   return !!(s.pq && s.pq.use && Array.isArray(s.pq.rows) &&
@@ -955,21 +876,18 @@ function gcVqFactor(gc, V, dir = "lag") {
   if (V > fh) return zh > fh ? (zh - V) / (zh - fh) : 1;
   return 1;
 }
-/* Per-inverter reactive capability (kVAr) at requested active dispatch p_d
-   (kW) and grid voltage V. If the dispatch is not permitted at that voltage,
-   active power is backed off to the maximum permitted point and the reactive
-   capability THERE is returned, with curtailedP set and p_used (kW) telling
-   what active power the inverter actually runs. */
+/* Per-inverter reactive capability (kVAr) at active dispatch p_d (kW) and
+   grid voltage V, using whichever inverter model is active. */
 function invQCapAt(s, r, p_d, V) {
+  const pPu = r.S_inv > 0 ? p_d / r.S_inv : 0;
   if (r.pqActive) {
-    const pPu = r.S_inv > 0 ? p_d / r.S_inv : 0;
-    const c = qCapClamped(s.pq, V, pPu);
-    return { q: c.pct / 100 * r.S_inv, p_used: c.pUsed * r.S_inv, curtailedP: c.curtailedP };
+    const c = qCapAt(s.pq, V, pPu);
+    return { q: c.allowed ? c.pct / 100 * r.S_inv : 0, allowed: c.allowed };
   }
   const S_v = r.S_eff * Math.min(V, 1);
-  if (p_d > S_v + 1e-9) return { q: 0, p_used: S_v, curtailedP: true };
+  if (p_d > S_v + 1e-9) return { q: 0, allowed: false };
   const circ = Math.sqrt(Math.max(0, S_v * S_v - p_d * p_d));
-  return { q: r.qOvr ? Math.min(num(s.invQOverride), circ) : circ, p_used: p_d, curtailedP: false };
+  return { q: r.qOvr ? Math.min(num(s.invQOverride), circ) : circ, allowed: true };
 }
 /* Plant Q capability at the POI at output level Ppu and voltage V.
    The study convention: inverters dispatch the active power actually needed
@@ -983,7 +901,7 @@ function plantCapPOI(s, r, Ppu, V = 1.0) {
   const p_d = Ppu * (r.P + r.lossSum) * 1000 / r.N;      // kW per inverter
   const c = invQCapAt(s, r, p_d, V);
   const qPlant = r.N * c.q / 1000;                       // MVAr produced/absorbed
-  return { prod: qPlant + r.Q_capbank - r.Q_xmer, abs: qPlant + r.Q_xmer, allowed: !c.curtailedP };
+  return { prod: qPlant + r.Q_capbank - r.Q_xmer, abs: qPlant + r.Q_xmer, allowed: c.allowed };
 }
 /* Full compliance assessment: P-Q coverage at nominal voltage in both
    directions, plus the G99-style corner points A/B/E/F on the V-Q envelope. */
@@ -1155,17 +1073,16 @@ function voltageSweep(s, r) {
   // dispatch the active power actually needed to deliver the grid limit
   const p_d = r.N > 0 ? (r.P + r.lossSum) * 1000 / r.N : 0; // kW per inverter
   return levels.map(V => {
-    const c = r.N > 0 ? invQCapAt(s, r, p_d, V) : { q: 0, p_used: 0, curtailedP: true };
+    const c = r.N > 0 ? invQCapAt(s, r, p_d, V) : { q: 0, allowed: false };
+    const curtailed = !c.allowed;
     const q_v = c.q;                                      // kVAr per inverter
-    const p_used = c.p_used;                              // kW actually run
-    const curtailed = c.curtailedP;                       // P backed off at this V
-    const pAch = r.N * p_used / 1000 - r.lossSum;         // MW achievable at grid
+    const S_v = curtailed ? 0 : Math.hypot(p_d, q_v);     // implied apparent power
     const Q_plant = r.N * q_v / 1000 + r.Q_capbank;       // MVAr
     // requirement at this voltage: grid-code Q (tapered by V) plus transformer consumption
     const req = gcQreqPu(s.gridCode, 1, "lag") * r.P * gcVqFactor(s.gridCode, V, "lag") + r.Q_xmer;
     const margin = Q_plant - req;
-    return { V, q_v, p_used, pAch, Q_plant, req, margin, curtailed,
-             ok: margin >= -1e-9 };
+    return { V, S_v, q_v, Q_plant, req, margin, curtailed,
+             ok: margin >= -1e-9 && !(curtailed && req > 1e-9) };
   });
 }
 
@@ -1257,27 +1174,33 @@ function drawTriangle(r) {
   const x0 = mL, y0 = H - mB, x1 = x0 + px, y1 = y0 - qy;
   const phi = Math.atan2(Q, P) * 180 / Math.PI;
 
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  };
   svg.innerHTML = "";
   // faint grid baseline
-  svg.append(svgEl("line", { x1: x0 - 8, y1: y0, x2: W - 12, y2: y0, stroke: cGrid, "stroke-width": 1 }));
+  svg.append(el("line", { x1: x0 - 8, y1: y0, x2: W - 12, y2: y0, stroke: cGrid, "stroke-width": 1 }));
   // angle arc
   const arcR = Math.min(46, px * 0.45);
   const ax = x0 + arcR * Math.cos(-phi * Math.PI / 180);
   const ay = y0 + arcR * Math.sin(-phi * Math.PI / 180);
-  svg.append(svgEl("path", { d: `M ${x0 + arcR} ${y0} A ${arcR} ${arcR} 0 0 0 ${ax} ${ay}`, fill: "none", stroke: cMuted, "stroke-width": 1.25 }));
-  svg.append(svgEl("text", { x: x0 + arcR + 8, y: y0 - 8, fill: cMuted, "font-size": 10.5, "font-family": "ui-monospace, monospace" }, `φ = ${fmt(phi, 1)}°`));
+  svg.append(el("path", { d: `M ${x0 + arcR} ${y0} A ${arcR} ${arcR} 0 0 0 ${ax} ${ay}`, fill: "none", stroke: cMuted, "stroke-width": 1.25 }));
+  svg.append(el("text", { x: x0 + arcR + 8, y: y0 - 8, fill: cMuted, "font-size": 10.5, "font-family": "ui-monospace, monospace" }, `φ = ${fmt(phi, 1)}°`));
   // P
-  svg.append(svgEl("line", { x1: x0, y1: y0, x2: x1, y2: y0, stroke: cP, "stroke-width": 3, "stroke-linecap": "round" }));
-  svg.append(svgEl("text", { x: x0 + px / 2, y: y0 + 17, fill: cP, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `P ${fmt(r.P_total)} MW`));
+  svg.append(el("line", { x1: x0, y1: y0, x2: x1, y2: y0, stroke: cP, "stroke-width": 3, "stroke-linecap": "round" }));
+  svg.append(el("text", { x: x0 + px / 2, y: y0 + 17, fill: cP, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `P ${fmt(r.P_total)} MW`));
   // Q
-  svg.append(svgEl("line", { x1: x1, y1: y0, x2: x1, y2: y1, stroke: cQ, "stroke-width": 3, "stroke-linecap": "round" }));
-  const qLbl = svgEl("text", { x: x1 + 8, y: y0 - qy / 2 + 4, fill: cQ, "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" });
-  qLbl.append(svgEl("tspan", { x: x1 + 8, dy: 0 }, `Q ${fmt(r.Q_total)}`));
-  qLbl.append(svgEl("tspan", { x: x1 + 8, dy: 13 }, "MVAr"));
+  svg.append(el("line", { x1: x1, y1: y0, x2: x1, y2: y1, stroke: cQ, "stroke-width": 3, "stroke-linecap": "round" }));
+  const qLbl = el("text", { x: x1 + 8, y: y0 - qy / 2 + 4, fill: cQ, "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" });
+  qLbl.append(el("tspan", { x: x1 + 8, dy: 0 }, `Q ${fmt(r.Q_total)}`));
+  qLbl.append(el("tspan", { x: x1 + 8, dy: 13 }, "MVAr"));
   svg.append(qLbl);
   // S
-  svg.append(svgEl("line", { x1: x0, y1: y0, x2: x1, y2: y1, stroke: cInk, "stroke-width": 2, "stroke-dasharray": "6 4", "stroke-linecap": "round" }));
-  svg.append(svgEl("text", { x: x0 + px / 2 - 8, y: y1 + (y0 - y1) / 2 - 10, fill: cInk, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `S ${fmt(r.S_actual)} MVA`));
+  svg.append(el("line", { x1: x0, y1: y0, x2: x1, y2: y1, stroke: cInk, "stroke-width": 2, "stroke-dasharray": "6 4", "stroke-linecap": "round" }));
+  svg.append(el("text", { x: x0 + px / 2 - 8, y: y1 + (y0 - y1) / 2 - 10, fill: cInk, "text-anchor": "middle", "font-size": 11, "font-weight": 600, "font-family": "ui-monospace, monospace" }, `S ${fmt(r.S_actual)} MVA`));
 }
 
 /* ---------- P-Q capability grid & diagram ---------- */
@@ -1325,6 +1248,12 @@ function drawPQ(r) {
   const cGrid = css.getPropertyValue("--grid").trim();
   const cSurface = css.getPropertyValue("--surface").trim();
   const mono = "ui-monospace, Menlo, monospace";
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  };
   svg.innerHTML = "";
   const pq = state.pq, S = r.S_inv;
   const rows = (pq.rows || []).filter(rw => rw.v !== "" && Number.isFinite(num(rw.v)) && rw.q.some(x => x != null && x !== ""));
@@ -1349,23 +1278,23 @@ function drawPQ(r) {
   // grid + axes
   for (let i = 0; i <= 4; i++) {
     const pv = yMax / 4 * i, yy = y(pv);
-    svg.append(svgEl("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
-    svg.append(svgEl("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(pv, 0)));
+    svg.append(el("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
+    svg.append(el("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(pv, 0)));
   }
   const xstep = xMax > 400 ? 200 : xMax > 200 ? 100 : xMax > 80 ? 50 : 20;
   for (let qv = 0; qv <= xMax; qv += xstep) {
     for (const sgn of qv === 0 ? [1] : [1, -1]) {
       const xx = x(sgn * qv);
-      svg.append(svgEl("line", { x1: xx, y1: H - mB, x2: xx, y2: H - mB + 4, stroke: cMuted, "stroke-width": 1 }));
-      svg.append(svgEl("text", { x: xx, y: H - mB + 16, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(sgn * qv, 0)));
+      svg.append(el("line", { x1: xx, y1: H - mB, x2: xx, y2: H - mB + 4, stroke: cMuted, "stroke-width": 1 }));
+      svg.append(el("text", { x: xx, y: H - mB + 16, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(sgn * qv, 0)));
     }
   }
-  svg.append(svgEl("line", { x1: mL, y1: H - mB, x2: W - mR, y2: H - mB, stroke: cMuted, "stroke-width": 1.25 }));
-  svg.append(svgEl("line", { x1: x(0), y1: mT - 4, x2: x(0), y2: H - mB, stroke: cGrid, "stroke-width": 1.25 }));
-  svg.append(svgEl("text", { x: x(0) + 6, y: mT + 4, fill: cMuted, "font-size": 10.5 }, "P (kW)"));
-  svg.append(svgEl("text", { x: W - mR, y: H - 8, "text-anchor": "end", fill: cMuted, "font-size": 10.5 }, "Q (kVAr)"));
-  svg.append(svgEl("text", { x: mL, y: H - 8, fill: cMuted, "font-size": 10 }, "◀ Inductive"));
-  svg.append(svgEl("text", { x: W - mR, y: H - 22, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "Capacitive ▶"));
+  svg.append(el("line", { x1: mL, y1: H - mB, x2: W - mR, y2: H - mB, stroke: cMuted, "stroke-width": 1.25 }));
+  svg.append(el("line", { x1: x(0), y1: mT - 4, x2: x(0), y2: H - mB, stroke: cGrid, "stroke-width": 1.25 }));
+  svg.append(el("text", { x: x(0) + 6, y: mT + 4, fill: cMuted, "font-size": 10.5 }, "P (kW)"));
+  svg.append(el("text", { x: W - mR, y: H - 8, "text-anchor": "end", fill: cMuted, "font-size": 10.5 }, "Q (kVAr)"));
+  svg.append(el("text", { x: mL, y: H - 8, fill: cMuted, "font-size": 10 }, "◀ Inductive"));
+  svg.append(el("text", { x: W - mR, y: H - 22, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "Capacitive ▶"));
 
   // capability curves (symmetric ± Q), sampled densely over loading
   groups.forEach((g, gi) => {
@@ -1379,21 +1308,21 @@ function drawPQ(r) {
     if (!pts.length) return;
     const left = pts.map((d, i) => `${i ? "L" : "M"} ${x(-d.q).toFixed(1)} ${y(d.p).toFixed(1)}`).join(" ");
     const right = [...pts].reverse().map(d => `L ${x(d.q).toFixed(1)} ${y(d.p).toFixed(1)}`).join(" ");
-    svg.append(svgEl("path", { d: `${left} ${right}`, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    svg.append(el("path", { d: `${left} ${right}`, fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
     // legend
     const ly = mT + 14 + gi * 20;
-    svg.append(svgEl("line", { x1: W - mR + 14, y1: ly - 4, x2: W - mR + 34, y2: ly - 4, stroke: color, "stroke-width": 2.5, "stroke-linecap": "round" }));
-    svg.append(svgEl("text", { x: W - mR + 40, y: ly, fill: cInk2, "font-size": 10.5, "font-family": mono },
+    svg.append(el("line", { x1: W - mR + 14, y1: ly - 4, x2: W - mR + 34, y2: ly - 4, stroke: color, "stroke-width": 2.5, "stroke-linecap": "round" }));
+    svg.append(el("text", { x: W - mR + 40, y: ly, fill: cInk2, "font-size": 10.5, "font-family": mono },
       g.vs.map(v => v.toFixed(2)).join("/") + " Vn"));
   });
 
   // design operating point: Q each inverter must supply at its dispatched P
   const qOp = r.N > 0 ? r.Q_for_inv * 1000 / r.N : 0;
   if (r.N > 0 && r.p_inv > 0) {
-    svg.append(svgEl("line", { x1: x(qOp), y1: y(r.p_inv), x2: x(qOp), y2: H - mB, stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
-    svg.append(svgEl("line", { x1: x(0), y1: y(r.p_inv), x2: x(qOp), y2: y(r.p_inv), stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
-    svg.append(svgEl("circle", { cx: x(qOp), cy: y(r.p_inv), r: 5, fill: cInk, stroke: cSurface, "stroke-width": 2 }));
-    svg.append(svgEl("text", { x: x(qOp) + 9, y: y(r.p_inv) - 8, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "operating point"));
+    svg.append(el("line", { x1: x(qOp), y1: y(r.p_inv), x2: x(qOp), y2: H - mB, stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
+    svg.append(el("line", { x1: x(0), y1: y(r.p_inv), x2: x(qOp), y2: y(r.p_inv), stroke: cMuted, "stroke-width": 1, "stroke-dasharray": "3 3" }));
+    svg.append(el("circle", { cx: x(qOp), cy: y(r.p_inv), r: 5, fill: cInk, stroke: cSurface, "stroke-width": 2 }));
+    svg.append(el("text", { x: x(qOp) + 9, y: y(r.p_inv) - 8, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "operating point"));
   }
 
   // coordinate readout on hover
@@ -1556,9 +1485,7 @@ function drawVQDiagram(r, comp) {
   const caps = [];
   for (let v = vLo; v <= vHi + 1e-9; v += 0.005) {
     const cap = plantCapPOI(state, r, 1.0, v);
-    // curtailed points stay in the envelope: P is backed off there but the
-    // reactive capability at the permitted loading is real
-    caps.push({ v, prod: cap.prod, abs: cap.abs });
+    if (cap.allowed) caps.push({ v, prod: cap.prod, abs: cap.abs });
   }
   const xMax = Math.max(Qm, QmL, ...caps.map(d => Math.max(d.prod, d.abs)), 1) * 1.12;
   const x = q => mL + (q + xMax) / (2 * xMax) * (W - mL - mR);
@@ -1679,11 +1606,11 @@ function renderCornerTable(comp) {
   tb.innerHTML = "";
   comp.corners.forEach(pt => {
     const tr = document.createElement("tr");
-    const status = pt.ok
-      ? `<span class="vstatus ok">✓ pass</span>`
-      : pt.capQ < pt.req - 1e-6
-        ? `<span class="vstatus bad">✕ Q short ${fmt(pt.req - pt.capQ, 1)}${pt.allowed ? "" : " · P curtailed"}</span>`
-        : `<span class="vstatus warn">⚠ Q met · P curtailed</span>`;
+    const status = !pt.allowed
+      ? `<span class="vstatus warn">⚠ P curtailed</span>`
+      : pt.ok
+        ? `<span class="vstatus ok">✓ pass</span>`
+        : `<span class="vstatus bad">✕ short ${fmt(pt.req - pt.capQ, 1)}</span>`;
     tr.innerHTML = `
       <td>${pt.name}</td>
       <td>${fmt(pt.V, 2)}</td>
@@ -1707,6 +1634,12 @@ function drawVChart(rows, r) {
   const cCrit = css.getPropertyValue("--crit").trim();
   const cSurface = css.getPropertyValue("--surface").trim();
 
+  const el = (tag, attrs, text) => {
+    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    return e;
+  };
   svg.innerHTML = "";
   tip.style.display = "none";
   if (!rows.length) return;
@@ -1722,44 +1655,43 @@ function drawVChart(rows, r) {
   const ticks = 4;
   for (let i = 0; i <= ticks; i++) {
     const qv = yMax / ticks * i, yy = y(qv);
-    svg.append(svgEl("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
-    svg.append(svgEl("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(qv, 1)));
+    svg.append(el("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
+    svg.append(el("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(qv, 1)));
   }
-  svg.append(svgEl("text", { x: mL - 8, y: mT - 14, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "MVAr"));
+  svg.append(el("text", { x: mL - 8, y: mT - 14, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "MVAr"));
   // x-axis ticks
   rows.forEach(d => {
-    svg.append(svgEl("text", { x: x(d.V), y: H - mB + 17, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(d.V, 2)));
+    svg.append(el("text", { x: x(d.V), y: H - mB + 17, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(d.V, 2)));
   });
-  svg.append(svgEl("text", { x: (mL + W - mR) / 2, y: H - 5, "text-anchor": "middle", fill: cMuted, "font-size": 10.5 }, "Grid voltage (p.u.)"));
+  svg.append(el("text", { x: (mL + W - mR) / 2, y: H - 5, "text-anchor": "middle", fill: cMuted, "font-size": 10.5 }, "Grid voltage (p.u.)"));
 
   // requirement curve: grid-code Q tapered by voltage, plus transformer consumption
   const reqPath = rows.map((d, i) => `${i ? "L" : "M"} ${x(d.V).toFixed(1)} ${y(d.req).toFixed(1)}`).join(" ");
-  svg.append(svgEl("path", { d: reqPath, fill: "none", stroke: cInk, "stroke-width": 1.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
+  svg.append(el("path", { d: reqPath, fill: "none", stroke: cInk, "stroke-width": 1.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
   const yReq = y(rows[rows.length - 1].req);
-  const refLbl = svgEl("text", { x: W - mR + 8, y: yReq + 3.5, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono });
-  refLbl.append(svgEl("tspan", { x: W - mR + 8, dy: 0 }, `required Q`));
-  refLbl.append(svgEl("tspan", { x: W - mR + 8, dy: 12 }, `(grid code)`));
+  const refLbl = el("text", { x: W - mR + 8, y: yReq + 3.5, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono });
+  refLbl.append(el("tspan", { x: W - mR + 8, dy: 0 }, `required Q`));
+  refLbl.append(el("tspan", { x: W - mR + 8, dy: 12 }, `(grid code)`));
   svg.append(refLbl);
 
   // capability line
   const path = rows.map((d, i) => `${i ? "L" : "M"} ${x(d.V).toFixed(1)} ${y(d.Q_plant).toFixed(1)}`).join(" ");
-  svg.append(svgEl("path", { d: path, fill: "none", stroke: cLine, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+  svg.append(el("path", { d: path, fill: "none", stroke: cLine, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
   const last = rows[rows.length - 1];
   const yCap = y(last.Q_plant);
   // the reference label occupies yReq..yReq+12; dodge above the line on collision
   const capLblY = (yCap > yReq - 26 && yCap < yReq + 24) ? yReq - 12 : yCap + 3.5;
-  svg.append(svgEl("text", { x: W - mR + 8, y: capLblY, fill: cLine, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "capability"));
+  svg.append(el("text", { x: W - mR + 8, y: capLblY, fill: cLine, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "capability"));
 
   // points + hover targets
-  const cWarn = getComputedStyle(document.documentElement).getPropertyValue("--warn").trim();
   rows.forEach(d => {
-    const fill = !d.ok ? cCrit : d.curtailed ? cWarn : cLine;
-    svg.append(svgEl("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 4.5, fill, stroke: cSurface, "stroke-width": 2 }));
-    const hit = svgEl("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 14, fill: "transparent", cursor: "pointer" });
+    const fill = d.ok ? cLine : cCrit;
+    svg.append(el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 4.5, fill, stroke: cSurface, "stroke-width": 2 }));
+    const hit = el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 14, fill: "transparent", cursor: "pointer" });
     hit.addEventListener("mouseenter", () => {
       tip.innerHTML = `<span class="t">${fmt(d.V, 2)} p.u.</span><br>Q capability ${fmt(d.Q_plant)} MVAr<br>required ${fmt(d.req)} MVAr<br>` +
-        `margin ${(d.margin >= 0 ? "+" : "")}${fmt(d.margin)} MVAr` +
-        (d.curtailed ? `<br><span style="color:${cWarn}">P curtailed: ${fmt(d.pAch)} MW achievable</span>` : "");
+        (d.curtailed && d.req > 1e-9 ? `<span style="color:${cCrit}">P curtailed at this voltage</span>`
+                     : `margin ${(d.margin >= 0 ? "+" : "")}${fmt(d.margin)} MVAr`);
       tip.style.display = "block";
       const wrap = svg.parentElement.getBoundingClientRect();
       const sr = svg.getBoundingClientRect();
@@ -1778,17 +1710,16 @@ function renderVTable(rows, r) {
   tb.innerHTML = "";
   rows.forEach(d => {
     const tr = document.createElement("tr");
-    const status = !d.ok
-      ? `<span class="vstatus bad">✕ Q short ${fmt(-d.margin)} MVAr</span>`
-      : d.curtailed
-        ? `<span class="vstatus warn">✓ Q met · P curtailed</span>`
-        : (d.req > 1e-9 ? `<span class="vstatus ok">✓ meets requirement</span>` : `<span class="vstatus ok">✓ no requirement</span>`);
+    const status = d.curtailed && d.req > 1e-9
+      ? `<span class="vstatus warn">⚠ P curtailed</span>`
+      : d.ok
+        ? (d.req > 1e-9 ? `<span class="vstatus ok">✓ meets requirement</span>` : `<span class="vstatus ok">✓ no requirement</span>`)
+        : `<span class="vstatus bad">✕ short ${fmt(-d.margin)} MVAr</span>`;
     tr.innerHTML = `
       <td>${fmt(d.V, 2)}</td>
-      <td>${fmt(d.p_used, 1)}</td>
+      <td>${fmt(d.S_v, 1)}</td>
       <td>${fmt(d.q_v, 1)}</td>
       <td>${fmt(d.Q_plant)}</td>
-      <td>${fmt(d.pAch)}${d.curtailed ? " ⚠" : ""}</td>
       <td>${fmt(d.req)}</td>
       <td>${(d.margin >= 0 ? "+" : "") + fmt(d.margin)}</td>
       <td>${status}</td>`;
@@ -2061,275 +1992,10 @@ document.getElementById("fileImport").addEventListener("change", async e => {
   }
   e.target.value = "";
 });
-document.getElementById("btnPrint").addEventListener("click", buildReport);
-
-/* ---------- PDF study report ---------- */
-/* Composes a print-ready, study-style document in a new window: cover page,
-   numbered sections/tables/figures, the app's vector charts (captured in
-   light theme so they print correctly), and a conclusion. The browser's
-   "Save as PDF" produces the file. */
-function buildReport() {
-  // capture charts in light theme
-  const root = document.documentElement;
-  const prevTheme = root.getAttribute("data-theme");
-  root.setAttribute("data-theme", "light");
-  update();
-  const svgOf = id => document.getElementById(id).outerHTML;
-  const figs = {
-    gcVQ: svgOf("gcVQ"), gcPQ: svgOf("gcPQ"), triangle: svgOf("triangle"),
-    pqchart: svgOf("pqchart"), vchart: svgOf("vchart"),
-    vqDiag: svgOf("vqDiag"), pqDiag: svgOf("pqDiag"),
-  };
-  if (prevTheme === null) root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", prevTheme);
-  update();
-
-  const r = compute(state);
-  const sweep = voltageSweep(state, r);
-  const comp = gcCompliance(state, r);
-  const gc = state.gridCode;
-  const gcLabel = GC_PRESETS[gc.preset] ? GC_PRESETS[gc.preset].label : "Custom requirement";
-  const gcNote = GC_PRESETS[gc.preset] ? GC_PRESETS[gc.preset].note : "Custom envelope parameters — see Section 3.";
-  const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
-  const proj = escapeHtml(state.projectName || "Untitled project");
-  const e = escapeHtml;
-  const n = (v, dp = 2) => fmt(v, dp);
-  const chip = ok => ok
-    ? `<span class="chip ok">PASS</span>`
-    : `<span class="chip bad">FAIL</span>`;
-  const verdictTxt = comp.covered && r.meets ? "COMPLIANT" : "NOT COMPLIANT";
-  const qSrc = r.pqActive ? "manufacturer P–Q capability table (Section 2.4)"
-    : r.qOvr ? "manually specified value" : "derived as √(S² − P²)";
-
-  const xmerRows = r.xmers.filter(x => num(x.qty) > 0).map(x =>
-    `<tr><td>${e(x.name)}</td><td class="num">${n(num(x.qty), 0)}</td><td class="num">${n(num(x.rating), 0)}</td><td class="num">${n(num(x.z), 1)}</td><td class="num">${n(x.kvar, 1)}</td></tr>`).join("");
-  const lossRows = r.losses.map(l =>
-    `<tr><td>${e(l.name)}</td><td class="num">${n(num(l.pct), 2)}</td><td class="num">${n(l.mw, 3)}</td></tr>`).join("");
-  const pqHead = state.pq.pLevels.map(p => `<th class="num">${p.toFixed(1)}</th>`).join("");
-  const pqRows = [...state.pq.rows].sort((a, b) => num(b.v) - num(a.v)).map(row =>
-    `<tr><td class="num"><b>${n(num(row.v), 2)}</b></td>` +
-    row.q.map(q => `<td class="num">${q == null || q === "" ? "N/A" : n(num(q), 1)}</td>`).join("") + `</tr>`).join("");
-  const sweepRows = sweep.map(d =>
-    `<tr><td class="num">${n(d.V, 2)}</td><td class="num">${n(d.p_used, 1)}</td><td class="num">${n(d.q_v, 1)}</td><td class="num">${n(d.Q_plant)}</td><td class="num">${n(d.pAch)}</td><td class="num">${n(d.req)}</td><td class="num">${(d.margin >= 0 ? "+" : "") + n(d.margin)}</td><td>${d.ok ? (d.curtailed ? '<span class="chip warn">Q met · P curtailed</span>' : chip(true)) : chip(false)}</td></tr>`).join("");
-  const cornerRows = comp.corners.map(pt =>
-    `<tr><td>${pt.name}</td><td class="num">${n(pt.V, 2)}</td><td>${pt.dir === "lag" ? "Lagging (export)" : "Leading (absorb)"}</td><td class="num">${n(pt.req, 1)}</td><td class="num">${n(pt.capQ, 1)}</td><td>${pt.ok ? chip(true) : (pt.capQ < pt.req - 1e-6 ? chip(false) : '<span class="chip warn">Q met · P curtailed</span>')}</td></tr>`).join("");
-  const failList = [];
-  if (!r.meetsP) failList.push("the delivered active power falls short of the grid injection limit");
-  if (!r.meetsQ) failList.push("the compensated reactive power falls short of the total demand");
-  comp.corners.filter(pt => !pt.ok).forEach(pt => failList.push(`V–Q corner point ${pt.name} (${n(pt.V, 2)} p.u., ${pt.dir === "lag" ? "export" : "absorb"}) is not met`));
-  if (comp.worst) failList.push(`worst P–Q shortfall of ${n(comp.worst.short)} MVAr at ${n(comp.worst.Ppu * 100, 0)}% output`);
-
-  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
-<title>${proj} — Reactive Power Compensation Study</title>
-<style>
-  * { box-sizing: border-box; }
-  @page { size: A4; margin: 16mm 15mm 20mm; }
-  body { margin: 0 auto; max-width: 180mm; font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
-         font-size: 10.5pt; line-height: 1.55; color: #1a1d21; }
-  h1 { font-size: 21pt; color: #1C5CAB; line-height: 1.25; margin: 0 0 4mm; }
-  h2 { font-size: 13.5pt; color: #1C5CAB; border-bottom: 2px solid #1C5CAB; padding-bottom: 2px; margin: 10mm 0 4mm; }
-  h3 { font-size: 11pt; color: #1C5CAB; margin: 6mm 0 2mm; }
-  p { margin: 0 0 3mm; text-align: justify; }
-  table { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 2mm 0 1mm; break-inside: avoid; table-layout: auto; }
-  table.wide { font-size: 7.8pt; }
-  table.wide th, table.wide td { padding: 2px 4px; }
-  th { background: #1C5CAB; color: #fff; font-weight: 600; text-align: left; }
-  th, td { border: 1px solid #c9cfd6; padding: 3px 7px; }
-  tr:nth-child(even) td { background: #f4f6f8; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .tcap, .fcap { font-size: 8.5pt; color: #52606e; margin: 1mm 0 4mm; }
-  .tcap b, .fcap b { color: #1C5CAB; }
-  figure { margin: 3mm 0 1mm; break-inside: avoid; text-align: center; }
-  figure svg { width: 100%; max-width: 165mm; height: auto; background: #fff; }
-  figure.small svg { max-width: 120mm; }
-  .chip { display: inline-block; font-size: 8pt; font-weight: 700; padding: 0 6px; border-radius: 8px; }
-  .chip.ok { background: #c9efc9; color: #135813; }
-  .chip.bad { background: #f6c9c9; color: #7c1414; }
-  .chip.warn { background: #fdeec7; color: #7a5200; }
-  .cover { min-height: 240mm; display: flex; flex-direction: column; break-after: page; }
-  .cover .brand { font-size: 10pt; letter-spacing: 3px; color: #52606e; text-transform: uppercase; margin-top: 10mm; }
-  .cover .rule { height: 3px; background: #1C5CAB; width: 42mm; margin: 6mm 0 12mm; }
-  .cover h1 { font-size: 27pt; }
-  .cover .sub { font-size: 13pt; color: #52606e; margin-bottom: 18mm; }
-  .cover table { max-width: 120mm; font-size: 10pt; }
-  .cover .disclaimer { margin-top: auto; border: 1px solid #c9cfd6; background: #f4f6f8; padding: 4mm 5mm; font-size: 8.5pt; color: #52606e; }
-  .verdict { border: 2px solid; border-radius: 4px; padding: 4mm 5mm; font-size: 11pt; font-weight: 700; margin: 4mm 0; break-inside: avoid; }
-  .verdict.ok { border-color: #2e7d32; color: #1b5e20; background: #edf7ed; }
-  .verdict.bad { border-color: #c62828; color: #8e1515; background: #fdeeee; }
-  ul { margin: 0 0 3mm; padding-left: 6mm; }
-  li { margin-bottom: 1mm; }
-  section { break-before: page; }
-  section.flow { break-before: auto; }
-  .pfooter { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between;
-             font-size: 7.5pt; color: #8a939c; border-top: 0.5pt solid #c9cfd6; padding-top: 1mm; }
-  .toolbar { position: sticky; top: 0; background: #1C5CAB; color: #fff; padding: 10px 16px; display: flex;
-             gap: 14px; align-items: center; z-index: 10; margin-bottom: 8mm; }
-  .toolbar button { font-size: 11pt; font-weight: 700; padding: 6px 18px; border: none; border-radius: 5px;
-                    background: #fff; color: #1C5CAB; cursor: pointer; }
-  @media print { .toolbar { display: none; } }
-  @media screen { body { padding: 0 10mm 20mm; } .pfooter { display: none; } }
-</style></head><body>
-<div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button><span>In the print dialog choose “Save as PDF”. Background graphics on for best results.</span></div>
-<div class="pfooter"><span>${proj} — Reactive Power Compensation &amp; Grid Code Compliance Study</span><span>${today}</span></div>
-
-<div class="cover">
-  <div class="brand">Reactive Power Compensation Sizing</div>
-  <div class="rule"></div>
-  <h1>${proj}</h1>
-  <div class="sub">Reactive Power Compensation Sizing &amp; Grid Code Compliance Study</div>
-  <table>
-    <tr><th style="width:38%">Project</th><td>${proj}</td></tr>
-    <tr><th>Date</th><td>${today}</td></tr>
-    <tr><th>Grid code assessed</th><td>${e(gcLabel)}</td></tr>
-    <tr><th>Grid injection limit (RC)</th><td>${n(r.P)} MW</td></tr>
-    <tr><th>Inverters in design</th><td>${r.N} × ${n(r.S_inv, 0)} kVA${r.manualN ? " (fixed)" : " (auto-sized)"}</td></tr>
-    <tr><th>Overall result</th><td><b>${verdictTxt}</b></td></tr>
-  </table>
-  <div class="disclaimer"><b>Scope &amp; limitations.</b> This document was generated by an analytic screening tool. Capability is evaluated at the point of interconnection with transformer reactive consumption represented as a constant demand and no network load-flow, cable impedance or internal voltage-constraint modelling. Grid-code parameters are typical published values and must be confirmed against the applicable interconnection agreement. This report does not replace a certified power-system study.</div>
-</div>
-
-<section class="flow">
-<h2>1&nbsp;&nbsp;Executive summary</h2>
-<p>This study sizes the reactive power compensation of the <b>${proj}</b> solar PV plant and assesses its compliance with <b>${e(gcLabel)}</b>. The plant exports up to <b>${n(r.P)} MW</b> at the point of interconnection at a design power factor of ${n(r.pf, 3)} ${e(state.pfSense).toLowerCase()}, giving a total reactive power demand of <b>${n(r.Q_total)} MVAr</b> (grid requirement plus transformer consumption incl. margin).</p>
-<p>With <b>${r.N} inverters</b> of ${n(r.S_inv, 0)} kVA operating at cos φ ${n(r.pf_inv, 4)} (reactive capability per inverter ${n(r.q_inv, 1)} kVAr, ${qSrc})${r.Q_capbank > 0 ? ` and a ${n(r.Q_capbank)} MVAr capacitor bank` : ""}, the plant delivers <b>${n(r.P_delivered)} MW</b> to the grid while compensating <b>${n(r.Q_compensated)} MVAr</b>.</p>
-${verdictTxt === "COMPLIANT"
-  ? `<p>The assessment finds the design <b>compliant</b>: the P–Q envelope is covered across the whole output range and all V–Q corner points at Registered Capacity are met.</p>`
-  : `<p>The assessment finds the design <b>not compliant</b>: ${failList.map(e).join("; ")}. Mitigation options include additional inverters, a lower inverter power factor, or a capacitor bank (see Section 7).</p>`}
-<table>
-  <tr><th>Quantity</th><th class="num">Value</th><th>Unit</th></tr>
-  <tr><td>Plant MVA rating</td><td class="num">${n(r.S_plant)}</td><td>MVA</td></tr>
-  <tr><td>Grid reactive demand (PF requirement)</td><td class="num">${n(r.Q_grid)}</td><td>MVAr</td></tr>
-  <tr><td>Transformer reactive consumption (incl. ${n(num(state.xmerMargin), 0)}% margin)</td><td class="num">${n(r.Q_xmer)}</td><td>MVAr</td></tr>
-  <tr><td>Total reactive demand</td><td class="num">${n(r.Q_total)}</td><td>MVAr</td></tr>
-  <tr><td>Total system losses</td><td class="num">${n(r.lossSum, 3)}</td><td>MW</td></tr>
-  <tr><td>Actual apparent power</td><td class="num">${n(r.S_actual)}</td><td>MVA</td></tr>
-  <tr><td>Inverters in design</td><td class="num">${r.N}</td><td>nos.</td></tr>
-  <tr><td>Power delivered to grid</td><td class="num">${n(r.P_delivered)}</td><td>MW</td></tr>
-  <tr><td>Delivery check</td><td colspan="2">${chip(r.meetsP)}</td></tr>
-  <tr><td>Reactive coverage check</td><td colspan="2">${chip(r.meetsQ)}</td></tr>
-  <tr><td>Grid-code compliance</td><td colspan="2">${chip(comp.covered)}</td></tr>
-</table>
-<div class="tcap"><b>Table 1</b> — Key results.</div>
-</section>
-
-<section>
-<h2>2&nbsp;&nbsp;Inputs and assumptions</h2>
-<h3>2.1&nbsp;&nbsp;Grid connection</h3>
-<table>
-  <tr><th>Parameter</th><th class="num">Value</th><th>Unit</th></tr>
-  <tr><td>Grid injection limit / Registered Capacity</td><td class="num">${n(r.P)}</td><td>MW</td></tr>
-  <tr><td>Design power factor at POI</td><td class="num">${n(r.pf, 3)}</td><td>${e(state.pfSense)}</td></tr>
-  ${state.installedDC ? `<tr><td>Installed DC capacity</td><td class="num">${n(num(state.installedDC))}</td><td>MWp</td></tr>` : ""}
-</table>
-<div class="tcap"><b>Table 2</b> — Grid connection parameters.</div>
-<h3>2.2&nbsp;&nbsp;Transformers</h3>
-<table>
-  <tr><th>Group</th><th class="num">Qty</th><th class="num">Rating (kVA)</th><th class="num">Impedance (%)</th><th class="num">Q (kVAr)</th></tr>
-  ${xmerRows}
-  <tr><td><b>Total incl. ${n(num(state.xmerMargin), 0)}% design margin</b></td><td colspan="3"></td><td class="num"><b>${n(r.Q_xmer * 1000, 0)}</b></td></tr>
-</table>
-<div class="tcap"><b>Table 3</b> — Transformer reactive consumption (Q = qty × rating × Z%).</div>
-<h3>2.3&nbsp;&nbsp;System losses</h3>
-<table>
-  <tr><th>Loss source</th><th class="num">Fraction (%)</th><th class="num">Loss (MW)</th></tr>
-  ${lossRows}
-  <tr><td><b>Total</b></td><td></td><td class="num"><b>${n(r.lossSum, 3)}</b></td></tr>
-</table>
-<div class="tcap"><b>Table 4</b> — Internal system losses applied to the grid injection limit.</div>
-<h3>2.4&nbsp;&nbsp;Inverter</h3>
-<table>
-  <tr><th>Parameter</th><th class="num">Value</th><th>Unit</th></tr>
-  <tr><td>Apparent power rating</td><td class="num">${n(r.S_inv, 0)}</td><td>kVA</td></tr>
-  <tr><td>Operating power factor</td><td class="num">${n(r.pf_inv, 4)}</td><td>cos φ</td></tr>
-  <tr><td>Active power per inverter</td><td class="num">${n(r.p_inv, 1)}</td><td>kW</td></tr>
-  <tr><td>Reactive capability per inverter (${qSrc.split(" (")[0]})</td><td class="num">${n(r.q_inv, 1)}</td><td>kVAr</td></tr>
-  <tr><td>Capacitor bank</td><td class="num">${n(r.Q_capbank)}</td><td>MVAr</td></tr>
-  <tr><td>Inverter count mode</td><td colspan="2">${r.manualN ? `Fixed at ${r.N} (auto minimum ${r.N_req})` : `Auto-sized: ${r.N}`}</td></tr>
-</table>
-<div class="tcap"><b>Table 5</b> — Inverter and compensation parameters.</div>
-${r.pqActive ? `
-<table class="wide">
-  <tr><th class="num">V (p.u.) \\ P (p.u.)</th>${pqHead}</tr>
-  ${pqRows}
-</table>
-<div class="tcap"><b>Table 6</b> — Manufacturer Q(t)-mode capability: maximum reactive power in % of rated kVA per grid voltage and active-power loading (N/A = operation not permitted).</div>` : ""}
-<h3>2.5&nbsp;&nbsp;Assumptions</h3>
-<ul>
-  <li>Inverters are dispatched at the active power required to deliver the grid limit — (limit + losses) ÷ count — so surplus inverters free reactive headroom.</li>
-  <li>Where the capability table does not permit that loading at a voltage, active power is backed off to the maximum permitted loading and the reactive capability there is used (flagged as P-curtailment).</li>
-  <li>Inverter reactive capability is taken as symmetric (equal export and absorption).</li>
-  <li>Transformer reactive consumption is modelled as a constant demand; export capability at the POI is net of it, absorption capability is aided by it.</li>
-  <li>The capacitor bank contributes to export only and is assumed switched out for absorption.</li>
-  <li>Voltage capability is interpolated linearly between capability-table rows, conservatively across N/A gaps.</li>
-</ul>
-</section>
-
-<section>
-<h2>3&nbsp;&nbsp;Grid code requirement</h2>
-<p><b>${e(gcLabel)}.</b> ${e(gcNote)}</p>
-<p>The requirement corresponds to Q = ±${n(gcQmaxPu(gc), 3)} × P<sub>max</sub> (${n(gcQreqPu(gc, 1, "lag") * r.P)} MVAr at the ${n(r.P)} MW Registered Capacity).</p>
-<figure class="small">${figs.gcVQ}<div class="fcap"><b>Figure 1</b> — Reactive power requirement at the connection point, at Registered Capacity.</div></figure>
-<figure class="small">${figs.gcPQ}<div class="fcap"><b>Figure 2</b> — Reactive power requirement at the connection point, below Registered Capacity (grey: DNO-discretion relief; hatched: tolerance band).</div></figure>
-</section>
-
-<section>
-<h2>4&nbsp;&nbsp;Sizing results</h2>
-<p>The plant must generate ${n(r.P_total)} MW (grid limit plus internal losses) and ${n(r.Q_total)} MVAr, an apparent power of ${n(r.S_actual)} MVA at angle φ = ${n(Math.atan2(r.Q_total, r.P_total) * 180 / Math.PI, 1)}°.</p>
-<figure class="small">${figs.triangle}<div class="fcap"><b>Figure 3</b> — Power triangle at the plant terminals (losses included).</div></figure>
-<p>${r.N} inverters at cos φ ${n(r.pf_inv, 4)} deliver ${n(r.P_delivered)} MW to the grid (${chip(r.meetsP)}) while compensating ${n(r.Q_compensated)} MVAr against the ${n(r.Q_total)} MVAr demand (${chip(r.meetsQ)}).</p>
-</section>
-
-<section>
-<h2>5&nbsp;&nbsp;Inverter P–Q capability</h2>
-<p>The inverter capability diagram below is drawn from the manufacturer's Q(t)-mode table (Table 6); identical voltage rows are grouped. The marker shows the design operating point — the reactive power each inverter must supply at its dispatched active power.</p>
-<figure>${figs.pqchart}<div class="fcap"><b>Figure 4</b> — Inverter P–Q capability per grid voltage with the design operating point.</div></figure>
-</section>
-
-<section>
-<h2>6&nbsp;&nbsp;Reactive capability across the voltage range</h2>
-<p>Plant reactive capability evaluated at each grid voltage at Registered Capacity dispatch, against the grid-code requirement (tapered with voltage) plus transformer consumption.</p>
-<figure>${figs.vchart}<div class="fcap"><b>Figure 5</b> — Plant reactive capability vs grid voltage against the grid-code requirement.</div></figure>
-<table class="wide">
-  <tr><th class="num">V (p.u.)</th><th class="num">P/inv (kW)</th><th class="num">Q/inv (kVAr)</th><th class="num">Plant Q (MVAr)</th><th class="num">Achievable P (MW)</th><th class="num">Required Q (MVAr)</th><th class="num">Margin (MVAr)</th><th>Status</th></tr>
-  ${sweepRows}
-</table>
-<div class="tcap"><b>Table 7</b> — Voltage sweep at Registered Capacity dispatch.</div>
-</section>
-
-<section>
-<h2>7&nbsp;&nbsp;Grid code compliance</h2>
-<h3>7.1&nbsp;&nbsp;V–Q at Registered Capacity</h3>
-<figure>${figs.vqDiag}<div class="fcap"><b>Figure 6</b> — V–Q diagram at the connection point: requirement polygon vs plant capability envelope.</div></figure>
-<table>
-  <tr><th>Point</th><th class="num">V (p.u.)</th><th>Direction</th><th class="num">Q required (MVAr)</th><th class="num">Q available (MVAr)</th><th>Status</th></tr>
-  ${cornerRows}
-</table>
-<div class="tcap"><b>Table 8</b> — V–Q envelope corner points at Registered Capacity (the A/B/E/F load-flow cases of a G99-style study).</div>
-<h3>7.2&nbsp;&nbsp;P–Q at nominal voltage</h3>
-<figure>${figs.pqDiag}<div class="fcap"><b>Figure 7</b> — P–Q diagram at the connection point, nominal voltage: requirement envelope vs plant capability.</div></figure>
-<div class="verdict ${verdictTxt === "COMPLIANT" ? "ok" : "bad"}">Overall assessment: ${verdictTxt}</div>
-</section>
-
-<section>
-<h2>8&nbsp;&nbsp;Conclusion</h2>
-${verdictTxt === "COMPLIANT"
-  ? `<p>The ${proj} plant, with ${r.N} × ${n(r.S_inv, 0)} kVA inverters operating at cos φ ${n(r.pf_inv, 4)}${r.Q_capbank > 0 ? ` and a ${n(r.Q_capbank)} MVAr capacitor bank` : ""}, meets the reactive power requirements of ${e(gcLabel)}: the P–Q envelope is covered across the full output range and all V–Q corner points at Registered Capacity are satisfied, while delivering ${n(r.P_delivered)} MW to the grid.</p>
-<p>The design should be confirmed with a full network load-flow study including cable and transformer impedances, internal voltage constraints and the DNO/TSO's specific connection conditions.</p>`
-  : `<p>The assessed configuration does not meet the reactive power requirements of ${e(gcLabel)}: ${failList.map(e).join("; ")}.</p>
-<p>Possible mitigations, to be evaluated: increasing the inverter count, operating the inverters at a lower power factor (more reactive headroom), adding a capacitor bank for the export deficit, or selecting inverters with a stronger low-voltage reactive capability. The design should subsequently be confirmed with a full network load-flow study.</p>`}
-</section>
-</body></html>`;
-
-  const w = window.open("", "_blank");
-  if (!w) { alert("The report window was blocked — allow pop-ups for this page and try again."); return; }
-  w.document.write(html);
-  w.document.close();
-}
+document.getElementById("btnPrint").addEventListener("click", () => window.print());
 document.getElementById("btnReset").addEventListener("click", () => {
-  const key = document.getElementById("exampleSelect").value;
-  const name = key === "brecks" ? "Brecks Solar Farm (G99 study)" : "Belvior (worksheet defaults)";
-  if (!confirm(`Replace all current inputs with the ${name} example?`)) return;
-  state = exampleScenario(key);
+  if (!confirm("Replace all current inputs with the Belvior worksheet defaults?")) return;
+  state = structuredClone(DEFAULTS);
   initAll();
 });
 
