@@ -23,14 +23,15 @@ injection limit and the reactive power demand.
    active delivery and the reactive demand.
 5. **Inverter P–Q capability** *(new, not in the worksheet)* — the datasheet's
    Q(t)-mode capability table, editable in place, rendered as a P–Q diagram.
-6. **Reactive capability vs grid voltage** *(new, not in the worksheet)* — the
-   plant's reactive capability evaluated across a grid-voltage band
-   (default 0.80–1.15 p.u., editable). With the capability table in use, each
-   level reads the table (interpolated, clamped at the edges); otherwise a
-   current-limit model applies (`S(V) = V × S_rated` below nominal, rated
-   above, P-priority: `q(V) = √(S(V)² − p²)`). Each level gets a pass/fail
-   verdict against the reactive demand, with active-power-curtailment
-   flagging, plus a capability curve chart with hover details.
+6. **Grid-code compliance diagrams** *(new, not in the worksheet)* — the two
+   assessment curves of a G99 Type C study: the **V–Q diagram** (requirement
+   polygon vs the plant's *maximum reactive capability* at each voltage — the
+   inverter curtails active power where the datasheet has no reactive headroom
+   at full output, so the envelope shows what the plant can actually produce)
+   with the A/B/E/F corner points, and the **P–Q diagram** at nominal voltage.
+   A corner-point table reports, per point, the required and available
+   reactive power and the active power delivered while meeting it (flagging
+   where active power is curtailed below Registered Capacity).
 
 The engine was verified against the workbook's cached values: all intermediate
 and final results (MVA rating, MVAr demand, transformer demand, losses,

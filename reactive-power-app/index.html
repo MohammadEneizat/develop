@@ -551,36 +551,11 @@
 
     <!-- Step 6 -->
     <section class="card">
-      <h2><span class="stepno">STEP 6</span> Reactive capability vs grid voltage</h2>
-      <p class="sub" id="sweepSub">Grid codes require reactive support across a voltage band, not just at nominal. With the Step 5 table in use, each voltage level reads the inverter's capability from the table at the dispatch loading. Where the table does not permit that loading at a voltage, active power is <em>backed off</em> to the maximum permitted point and the reactive capability there is used — the row shows the reduced achievable P (⚠) and an amber “Q met · P curtailed” status, rather than zeroing the capability. Otherwise a current-limit model applies: apparent power shrinks with voltage below 1.00 p.u. (S = V × S<sub>rated</sub>) and holds rated above.</p>
-      <div class="fields">
-        <div class="field" style="grid-column: 1 / -1">
-          <label for="voltLevels">Voltage levels to evaluate</label>
-          <div class="inwrap"><input id="voltLevels" type="text" value="0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15" spellcheck="false"><span class="unit">p.u.</span></div>
-        </div>
-      </div>
-      <div class="vchart-wrap">
-        <svg id="vchart" viewBox="0 0 760 300" role="img" aria-label="Plant reactive power capability versus grid voltage, compared with the required reactive demand"></svg>
-        <div class="vtip" id="vtip"></div>
-      </div>
-      <div class="rowscroll">
-        <table class="vtable" id="vtable">
-          <thead>
-            <tr><th>Voltage (p.u.)</th><th>P / inverter (kW)</th><th>Q / inverter (kVAr)</th><th>Plant Q capability (MVAr)</th><th>Achievable P (MW)</th><th>Required Q (MVAr)</th><th>Margin (MVAr)</th><th>Status</th></tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div class="note">Inverters are dispatched at the active power actually needed to deliver the grid limit — (limit + losses) ÷ count — as in a G99 study, so surplus inverters free reactive headroom. Where the table does not permit that loading at a voltage, active power is backed off to the maximum permitted point and the reactive capability there is used — a real, non-zero Q with the achievable P shown alongside.</div>
-    </section>
-
-    <!-- Step 7 -->
-    <section class="card">
-      <h2><span class="stepno">STEP 7</span> Grid-code compliance diagrams</h2>
-      <p class="sub">The two assessment curves of a G99 Type C reactive power study. <b>V–Q at Registered Capacity</b>: the requirement polygon (dashed) against the plant's capability envelope at full output across the voltage range. <b>P–Q at nominal voltage</b>: the requirement envelope against plant capability over the whole output range. Capability is at the point of interconnection — net of transformer consumption on the export side, aided by it on the absorption side; inverter capability is taken as symmetric and the capacitor bank counts for export only.</p>
+      <h2><span class="stepno">STEP 6</span> Grid-code compliance diagrams</h2>
+      <p class="sub">The two assessment curves of a G99 Type C reactive power study. <b>V–Q diagram</b>: the requirement polygon (dashed) against the plant's <em>maximum reactive capability</em> at each voltage — where the datasheet has no reactive headroom at full output, the inverter curtails active power to free it, so the envelope reflects what the plant can actually produce. <b>P–Q at nominal voltage</b>: the requirement envelope against plant capability over the output range. Capability is at the point of interconnection — net of transformer consumption on the export side, aided by it on the absorption side; inverter capability is taken as symmetric and the capacitor bank counts for export only.</p>
       <figure>
-        <svg id="vqDiag" viewBox="0 0 760 360" role="img" aria-label="V-Q diagram at Registered Capacity: grid code requirement polygon versus plant capability envelope"></svg>
-        <figcaption>V–Q diagram at the connection point, Registered Capacity dispatch. Consumption (lead) left, production (lag) right.</figcaption>
+        <svg id="vqDiag" viewBox="0 0 760 360" role="img" aria-label="V-Q diagram: grid code requirement polygon versus maximum plant reactive capability envelope"></svg>
+        <figcaption>V–Q diagram at the connection point — maximum reactive capability (active power curtailed where the datasheet requires it). Consumption (lead) left, production (lag) right.</figcaption>
       </figure>
       <figure style="margin-top:16px">
         <svg id="pqDiag" viewBox="0 0 760 400" role="img" aria-label="P-Q diagram at nominal voltage: grid code requirement envelope versus plant capability"></svg>
@@ -634,11 +609,11 @@
       </div>
       <div class="rowscroll" style="margin-top:12px">
         <table class="vtable" id="cornerTable">
-          <thead><tr><th>Point</th><th>V (p.u.)</th><th>Direction</th><th>Q req (MVAr)</th><th>Q avail (MVAr)</th><th>Status</th></tr></thead>
+          <thead><tr><th>Point</th><th>V (p.u.)</th><th>Direction</th><th>Q req (MVAr)</th><th>Q avail (MVAr)</th><th>at P (MW)</th><th>Status</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
-      <div class="note" style="margin-top:10px">Corner points of the V–Q envelope at Registered Capacity (the A/B/E/F load-flow cases of a G99 study). Full diagrams in Step 7.</div>
+      <div class="note" style="margin-top:10px">Corner points of the V–Q envelope (the A/B/E/F load-flow cases of a G99 study). Q available is the maximum reactive capability at each voltage; “at P (MW)” is the active power delivered there — a ⚠ marks points where active power is curtailed below Registered Capacity to reach that reactive. Full diagrams in Step 6.</div>
     </section>
 
     <section class="card">
@@ -672,7 +647,6 @@ const DEFAULTS = {
   capBank: 0,
   invCountOverride: null,
   invQOverride: null,
-  voltLevels: [0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15],
   // Q(t)-mode capability: % of rated kVA vs active loading (p.u. of rated kVA),
   // one row per grid voltage; null = N/A (operation not permitted)
   pq: {
@@ -709,7 +683,6 @@ function load() {
     if (raw) {
       const s = JSON.parse(raw);
       if (s && Array.isArray(s.xmers) && Array.isArray(s.losses)) {
-        if (!Array.isArray(s.voltLevels) || !s.voltLevels.length) s.voltLevels = [...DEFAULTS.voltLevels];
         if (!s.pq || !Array.isArray(s.pq.rows) || !Array.isArray(s.pq.pLevels)) s.pq = structuredClone(DEFAULTS.pq);
         if (!s.gridCode || typeof s.gridCode.pfReq !== "number") s.gridCode = structuredClone(DEFAULTS.gridCode);
         if (s.gridCode.shape !== undefined) {
@@ -963,11 +936,17 @@ function gcCompliance(s, r) {
     : [["A", fh, "lead"], ["B", fl, "lead"], ["E", fl, "lag"], ["F", fh, "lag"]];
   const corners = cornerDefs.map(([name, V, dir]) => {
     const req = (dir === "lag" ? Qm : QmLead) * gcVqFactor(gc, V, dir);
-    const cap = plantCapPOI(s, r, 1.0, V);
+    // maximum reactive capability at this voltage (active power curtailed as
+    // needed) — matches the V-Q envelope in the Step 6 diagram
+    const cap = plantMaxQAtV(s, r, V);
     const capQ = Math.max(0, dir === "lag" ? cap.prod : cap.abs);
-    const ok = cap.allowed && capQ >= req - 1e-6;
+    const ok = capQ >= req - 1e-6;
+    // active power delivered while meeting the requirement (full RC if no
+    // curtailment is needed)
+    const pAch = ok ? pAtReq(s, r, V, dir, req) : cap.pAch;
+    const curtailed = ok && pAch < r.P - 1e-3;
     if (!ok) covered = false;
-    return { name, V, dir, req, capQ, allowed: cap.allowed, ok };
+    return { name, V, dir, req, capQ, pAch, curtailed, ok };
   });
   return { pts, corners, covered, worst };
 }
@@ -1068,26 +1047,57 @@ function recommendN(s, S_inv, P_req_kW, Q_req_kvar) {
   return 0; // not achievable with this inverter
 }
 
-/* Voltage sweep. Inverters dispatch the active power needed to deliver the
-   grid limit. Where that loading is not permitted at a voltage, active power
-   is backed off to the maximum permitted point and the reactive capability
-   there is used (curtailed = true) — capability is not zeroed. */
-function voltageSweep(s, r) {
-  const levels = (Array.isArray(s.voltLevels) ? s.voltLevels : [])
-    .map(num).filter(v => v > 0).sort((a, b) => a - b);
-  const p_d = r.N > 0 ? (r.P + r.lossSum) * 1000 / r.N : 0; // kW per inverter requested
-  return levels.map(V => {
-    const c = r.N > 0 ? invQCapAt(s, r, p_d, V) : { q: 0, p_used: 0, curtailedP: true };
-    const q_v = c.q;                                     // kVAr per inverter
-    const p_used = c.p_used;                             // kW actually run
-    const curtailed = c.curtailedP;                      // active power backed off here
-    const pAch = r.N * p_used / 1000 - r.lossSum;        // MW achievable at grid
-    const Q_plant = r.N * q_v / 1000 + r.Q_capbank;      // MVAr
-    // requirement at this voltage: grid-code Q (tapered by V) plus transformer consumption
-    const req = gcQreqPu(s.gridCode, 1, "lag") * r.P * gcVqFactor(s.gridCode, V, "lag") + r.Q_xmer;
-    const margin = Q_plant - req;
-    return { V, q_v, p_used, pAch, Q_plant, req, margin, curtailed, ok: margin >= -1e-9 };
-  });
+/* Maximum reactive capability the plant can deliver at grid voltage V,
+   allowing the inverter to curtail active power. Scans the capability table
+   for the highest permitted Q% at that voltage, taking the highest loading
+   that achieves it (most active power at max Q). Returns plant production /
+   absorption (MVAr, same sign convention as plantCapPOI) and the achievable
+   active power at that operating point. Falls back to the RC-dispatch model
+   when the P-Q table is off. */
+function plantMaxQAtV(s, r, V) {
+  if (r.N <= 0) return { prod: r.Q_capbank - r.Q_xmer, abs: r.Q_xmer, pAch: 0 };
+  if (r.pqActive) {
+    let bestPct = -1, bestLoad = 0;
+    for (const p of s.pq.pLevels) {
+      const c = qCapAt(s.pq, V, p);
+      if (c.allowed && c.pct >= bestPct) { bestPct = c.pct; bestLoad = p; }
+    }
+    if (bestPct < 0) return { prod: r.Q_capbank - r.Q_xmer, abs: r.Q_xmer, pAch: 0 };
+    const qPlant = r.N * bestPct / 100 * r.S_inv / 1000;   // MVAr
+    const pAch = r.N * bestLoad * r.S_inv / 1000 - r.lossSum;
+    return { prod: qPlant + r.Q_capbank - r.Q_xmer, abs: qPlant + r.Q_xmer, pAch };
+  }
+  // circle / manual model: capability at the RC dispatch point
+  const p_d = (r.P + r.lossSum) * 1000 / r.N;
+  const c = invQCapAt(s, r, p_d, V);
+  const qPlant = r.N * c.q / 1000;
+  return { prod: qPlant + r.Q_capbank - r.Q_xmer, abs: qPlant + r.Q_xmer,
+           pAch: r.N * c.p_used / 1000 - r.lossSum };
+}
+
+/* Active power (MW at grid) at which the plant can still meet a reactive
+   requirement req (MVAr, in the given direction) at voltage V, capped at
+   Registered Capacity. Full RC when the requirement is met at the RC dispatch
+   point; otherwise the highest permitted loading whose reactive capability
+   still covers req (active power traded for reactive). */
+function pAtReq(s, r, V, dir, req) {
+  if (r.N <= 0) return 0;
+  if (!r.pqActive) return r.P;                 // circle model: no table trade-off
+  const reqQinv = 1000 / r.N * (dir === "lag" ? req - r.Q_capbank + r.Q_xmer : req - r.Q_xmer);
+  if (reqQinv <= 0) return r.P;                // met by cap bank / transformer alone
+  const loadRC = (r.P + r.lossSum) * 1000 / (r.N * r.S_inv);
+  // requirement already met at the Registered-Capacity operating point?
+  const cRC = qCapAt(s.pq, V, loadRC);
+  if (cRC.allowed && cRC.pct / 100 * r.S_inv >= reqQinv - 1e-6) return r.P;
+  // otherwise back off to the highest permitted loading that still meets req
+  let best = -1;
+  for (const p of s.pq.pLevels) {
+    if (p >= loadRC) continue;
+    const c = qCapAt(s.pq, V, p);
+    if (c.allowed && c.pct / 100 * r.S_inv >= reqQinv - 1e-6 && p > best) best = p;
+  }
+  if (best < 0) return 0;                       // requirement not achievable at any loading
+  return r.N * best * r.S_inv / 1000 - r.lossSum;
 }
 
 function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; }
@@ -1485,12 +1495,12 @@ function drawVQDiagram(r, comp) {
   const Qm = gcQreqPu(gc, 1, "lag") * r.P, QmL = gcQreqPu(gc, 1, "lead") * r.P;
   const vLo = Math.min(gc.vqAsym ? fl : zl, 0.90) - 0.02;
   const vHi = Math.max(gc.vqAsym ? fh : zh, 1.10) + 0.02;
-  // capability over the voltage range at full-output dispatch. Curtailed
-  // points stay on the envelope: P is backed off there but the reactive
-  // capability at the permitted loading is real.
+  // maximum reactive capability over the voltage range — the inverter curtails
+  // active power where the datasheet requires it to free reactive headroom, so
+  // the envelope reflects what the plant can actually produce at each voltage.
   const caps = [];
   for (let v = vLo; v <= vHi + 1e-9; v += 0.005) {
-    const cap = plantCapPOI(state, r, 1.0, v);
+    const cap = plantMaxQAtV(state, r, v);
     caps.push({ v, prod: cap.prod, abs: cap.abs });
   }
   const xMax = Math.max(Qm, QmL, ...caps.map(d => Math.max(d.prod, d.abs)), 1) * 1.12;
@@ -1613,123 +1623,15 @@ function renderCornerTable(comp) {
   comp.corners.forEach(pt => {
     const tr = document.createElement("tr");
     const status = pt.ok
-      ? `<span class="vstatus ok">✓ pass</span>`
-      : pt.capQ < pt.req - 1e-6
-        ? `<span class="vstatus bad">✕ Q short ${fmt(pt.req - pt.capQ, 1)}${pt.allowed ? "" : " · P curtailed"}</span>`
-        : `<span class="vstatus warn">⚠ Q met · P curtailed</span>`;
+      ? (pt.curtailed ? `<span class="vstatus warn">✓ pass · P curtailed</span>` : `<span class="vstatus ok">✓ pass</span>`)
+      : `<span class="vstatus bad">✕ Q short ${fmt(pt.req - pt.capQ, 1)}</span>`;
     tr.innerHTML = `
       <td>${pt.name}</td>
       <td>${fmt(pt.V, 2)}</td>
       <td style="font-family:var(--sans)" title="${pt.dir === "lag" ? "Production / export (overexcited)" : "Consumption / absorb (underexcited)"}">${pt.dir === "lag" ? "Lag" : "Lead"}</td>
       <td>${fmt(pt.req, 1)}</td>
       <td>${fmt(pt.capQ, 1)}</td>
-      <td>${status}</td>`;
-    tb.append(tr);
-  });
-}
-
-/* ---------- voltage capability chart & table ---------- */
-function drawVChart(rows, r) {
-  const svg = document.getElementById("vchart");
-  const tip = document.getElementById("vtip");
-  const css = getComputedStyle(document.documentElement);
-  const cLine = css.getPropertyValue("--series-p").trim();
-  const cInk = css.getPropertyValue("--ink").trim();
-  const cMuted = css.getPropertyValue("--muted").trim();
-  const cGrid = css.getPropertyValue("--grid").trim();
-  const cCrit = css.getPropertyValue("--crit").trim();
-  const cSurface = css.getPropertyValue("--surface").trim();
-
-  const el = (tag, attrs, text) => {
-    const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    for (const k in attrs) e.setAttribute(k, attrs[k]);
-    if (text != null) e.textContent = text;
-    return e;
-  };
-  svg.innerHTML = "";
-  tip.style.display = "none";
-  if (!rows.length) return;
-
-  const W = 760, H = 300, mL = 52, mR = 118, mT = 30, mB = 40;
-  const vMin = rows[0].V, vMax = rows[rows.length - 1].V;
-  const yMax = Math.max(...rows.map(d => Math.max(d.Q_plant, d.req))) * 1.12 || 1;
-  const x = V => vMax === vMin ? mL + (W - mL - mR) / 2 : mL + (V - vMin) / (vMax - vMin) * (W - mL - mR);
-  const y = q => H - mB - (q / yMax) * (H - mT - mB);
-  const mono = "ui-monospace, Menlo, monospace";
-
-  // gridlines + y-axis ticks
-  const ticks = 4;
-  for (let i = 0; i <= ticks; i++) {
-    const qv = yMax / ticks * i, yy = y(qv);
-    svg.append(el("line", { x1: mL, y1: yy, x2: W - mR, y2: yy, stroke: cGrid, "stroke-width": 1 }));
-    svg.append(el("text", { x: mL - 8, y: yy + 3.5, "text-anchor": "end", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(qv, 1)));
-  }
-  svg.append(el("text", { x: mL - 8, y: mT - 14, "text-anchor": "end", fill: cMuted, "font-size": 10 }, "MVAr"));
-  // x-axis ticks
-  rows.forEach(d => {
-    svg.append(el("text", { x: x(d.V), y: H - mB + 17, "text-anchor": "middle", fill: cMuted, "font-size": 10.5, "font-family": mono }, fmt(d.V, 2)));
-  });
-  svg.append(el("text", { x: (mL + W - mR) / 2, y: H - 5, "text-anchor": "middle", fill: cMuted, "font-size": 10.5 }, "Grid voltage (p.u.)"));
-
-  // requirement curve: grid-code Q tapered by voltage, plus transformer consumption
-  const reqPath = rows.map((d, i) => `${i ? "L" : "M"} ${x(d.V).toFixed(1)} ${y(d.req).toFixed(1)}`).join(" ");
-  svg.append(el("path", { d: reqPath, fill: "none", stroke: cInk, "stroke-width": 1.5, "stroke-dasharray": "6 4", "stroke-linejoin": "round" }));
-  const yReq = y(rows[rows.length - 1].req);
-  const refLbl = el("text", { x: W - mR + 8, y: yReq + 3.5, fill: cInk, "font-size": 10.5, "font-weight": 600, "font-family": mono });
-  refLbl.append(el("tspan", { x: W - mR + 8, dy: 0 }, `required Q`));
-  refLbl.append(el("tspan", { x: W - mR + 8, dy: 12 }, `(grid code)`));
-  svg.append(refLbl);
-
-  // capability line
-  const path = rows.map((d, i) => `${i ? "L" : "M"} ${x(d.V).toFixed(1)} ${y(d.Q_plant).toFixed(1)}`).join(" ");
-  svg.append(el("path", { d: path, fill: "none", stroke: cLine, "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
-  const last = rows[rows.length - 1];
-  const yCap = y(last.Q_plant);
-  // the reference label occupies yReq..yReq+12; dodge above the line on collision
-  const capLblY = (yCap > yReq - 26 && yCap < yReq + 24) ? yReq - 12 : yCap + 3.5;
-  svg.append(el("text", { x: W - mR + 8, y: capLblY, fill: cLine, "font-size": 10.5, "font-weight": 600, "font-family": mono }, "capability"));
-
-  // points + hover targets
-  const cWarn = getComputedStyle(document.documentElement).getPropertyValue("--warn").trim();
-  rows.forEach(d => {
-    const fill = !d.ok ? cCrit : d.curtailed ? cWarn : cLine;
-    svg.append(el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 4.5, fill, stroke: cSurface, "stroke-width": 2 }));
-    const hit = el("circle", { cx: x(d.V), cy: y(d.Q_plant), r: 14, fill: "transparent", cursor: "pointer" });
-    hit.addEventListener("mouseenter", () => {
-      tip.innerHTML = `<span class="t">${fmt(d.V, 2)} p.u.</span><br>Q capability ${fmt(d.Q_plant)} MVAr<br>required ${fmt(d.req)} MVAr<br>` +
-        `margin ${(d.margin >= 0 ? "+" : "")}${fmt(d.margin)} MVAr` +
-        (d.curtailed ? `<br><span style="color:${cWarn}">P curtailed: ${fmt(d.pAch)} MW achievable</span>` : "");
-      tip.style.display = "block";
-      const wrap = svg.parentElement.getBoundingClientRect();
-      const sr = svg.getBoundingClientRect();
-      const px = sr.left - wrap.left + x(d.V) / W * sr.width;
-      const py = sr.top - wrap.top + y(d.Q_plant) / H * sr.height;
-      tip.style.left = Math.min(px + 12, wrap.width - tip.offsetWidth - 4) + "px";
-      tip.style.top = Math.max(py - tip.offsetHeight - 10, 0) + "px";
-    });
-    hit.addEventListener("mouseleave", () => { tip.style.display = "none"; });
-    svg.append(hit);
-  });
-}
-
-function renderVTable(rows, r) {
-  const tb = document.querySelector("#vtable tbody");
-  tb.innerHTML = "";
-  rows.forEach(d => {
-    const tr = document.createElement("tr");
-    const status = !d.ok
-      ? `<span class="vstatus bad">✕ Q short ${fmt(-d.margin)} MVAr</span>`
-      : d.curtailed
-        ? `<span class="vstatus warn">✓ Q met · P curtailed</span>`
-        : (d.req > 1e-9 ? `<span class="vstatus ok">✓ meets requirement</span>` : `<span class="vstatus ok">✓ no requirement</span>`);
-    tr.innerHTML = `
-      <td>${fmt(d.V, 2)}</td>
-      <td>${fmt(d.p_used, 1)}</td>
-      <td>${fmt(d.q_v, 1)}</td>
-      <td>${fmt(d.Q_plant)}</td>
-      <td>${fmt(d.pAch)}${d.curtailed ? " ⚠" : ""}</td>
-      <td>${fmt(d.req)}</td>
-      <td>${(d.margin >= 0 ? "+" : "") + fmt(d.margin)}</td>
+      <td>${fmt(pt.pAch, 1)}${pt.curtailed ? " ⚠" : ""}</td>
       <td>${status}</td>`;
     tb.append(tr);
   });
@@ -1784,16 +1686,12 @@ function update() {
     ? `Compliant: the plant covers the P–Q envelope across the output range and all V–Q corner points at Registered Capacity (Q = ±${fmt(gcQreqPu(state.gridCode, 1, "lag") * r.P, 1)} MVAr at the CP).`
     : (comp.worst
         ? `Not compliant: worst P–Q shortfall <b>${fmt(comp.worst.short)} MVAr</b> (${comp.worst.dir === "lag" ? "export" : "absorb"}) at <b>${fmt(comp.worst.Ppu * 100, 0)}%</b> output${failedCorners.length ? `; V–Q corner point${failedCorners.length > 1 ? "s" : ""} ${failedCorners.join(", ")} also fail` : ""}. Add more inverters or a capacitor bank.`
-        : `Not compliant: V–Q corner point${failedCorners.length > 1 ? "s" : ""} <b>${failedCorners.join(", ")}</b> fail at Registered Capacity — see the Step 7 diagrams.`);
+        : `Not compliant: V–Q corner point${failedCorners.length > 1 ? "s" : ""} <b>${failedCorners.join(", ")}</b> fail at Registered Capacity — see the Step 6 diagrams.`);
 
   drawPQ(r);
   const qOp = r.N > 0 ? r.Q_for_inv * 1000 / r.N : 0;
   document.getElementById("pqOpNote").textContent =
     r.N > 0 ? `${fmt(qOp, 1)} kVAr at ${fmt(r.p_inv, 1)} kW per inverter` : "—";
-
-  const vrows = voltageSweep(state, r);
-  drawVChart(vrows, r);
-  renderVTable(vrows, r);
 
   // breakdown bars
   const bars = document.getElementById("qBars");
@@ -1932,12 +1830,6 @@ invCountInput.addEventListener("input", () => {
   update();
 });
 
-const voltInput = document.getElementById("voltLevels");
-voltInput.addEventListener("input", () => {
-  state.voltLevels = voltInput.value.split(/[,;\s]+/).map(parseFloat).filter(v => Number.isFinite(v) && v > 0);
-  update();
-});
-
 document.getElementById("addXmer").addEventListener("click", () => {
   state.xmers.push({ name: `Transformer group ${state.xmers.length + 1}`, qty: 1, rating: 1000, z: 6 });
   renderXmerRows(); update();
@@ -1988,11 +1880,9 @@ document.getElementById("btnReset").addEventListener("click", () => {
 function initAll() {
   ["projectName","installedDC","gridLimit","powerFactor","pfSense","xmerMargin","invKVA","capBank"]
     .forEach(id => { document.getElementById(id).value = state[id] ?? ""; });
-  if (!Array.isArray(state.voltLevels) || !state.voltLevels.length) state.voltLevels = [...DEFAULTS.voltLevels];
   if (!state.pq || !Array.isArray(state.pq.rows) || !Array.isArray(state.pq.pLevels)) state.pq = structuredClone(DEFAULTS.pq);
   if (!state.gridCode || typeof state.gridCode.pfReq !== "number") state.gridCode = structuredClone(DEFAULTS.gridCode);
   fillGCInputs();
-  document.getElementById("voltLevels").value = state.voltLevels.join(", ");
   document.getElementById("invCount").value = state.invCountOverride ?? "";
   document.getElementById("invQ").value = state.invQOverride ?? "";
   document.getElementById("pqUse").checked = !!state.pq.use;
