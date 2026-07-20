@@ -494,7 +494,7 @@
     <!-- Step 4 -->
     <section class="card">
       <h2><span class="stepno">STEP 4</span> Inverter fleet &amp; compensation</h2>
-      <p class="sub">No power-factor knob: each inverter simply dispatches the active power the plant needs — (grid limit + losses) ÷ count — and its reactive capability follows from that loading. Enter the number of inverters your plant has, or leave it blank to use the recommended count: the smallest fleet that covers <b>both</b> the active delivery and the reactive demand.</p>
+      <p class="sub">Active power is the priority: each inverter dispatches the active power the plant needs — (grid limit + losses) ÷ count — and its reactive capability is whatever remains at that loading (active power is never curtailed for reactive). Enter the number of inverters your plant has, or leave it blank for the recommended count: the smallest fleet that delivers full active power <b>and</b> covers the reactive requirement across the voltage range.</p>
       <div class="fields">
         <div class="field">
           <label for="invKVA">Inverter apparent power</label>
@@ -522,7 +522,7 @@
         <div class="chip"><span class="k">Q / inverter at dispatch</span><span class="v" id="outInvQ">—<small>kVAr</small></span></div>
         <div class="chip"><span class="k">Q for inverters (after cap bank)</span><span class="v" id="outQInv">—<small>MVAr</small></span></div>
       </div>
-      <div class="note">Reactive capability at the dispatch point comes from the Step 5 capability table (1.00 Vn row) when it is in use; otherwise from the manual kVAr value, or the circle √(S² − P²). A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. More inverters ⇒ lighter loading each ⇒ more reactive headroom — the recommended count is where both requirements are first met.</div>
+      <div class="note">Reactive capability at the dispatch point comes from the Step 5 capability table (1.00 Vn row) when it is in use; otherwise from the manual kVAr value, or the circle √(S² − P²). A capacitor bank supplies part of the reactive demand directly, so it <em>reduces</em> the share the inverters must cover. More inverters ⇒ lighter loading each ⇒ more reactive headroom at every voltage — the recommended count is the smallest fleet that still meets the grid-code reactive requirement across the voltage range while delivering full active power.</div>
     </section>
 
     <!-- Step 5: inverter P-Q capability table + diagram -->
@@ -552,10 +552,10 @@
     <!-- Step 6 -->
     <section class="card">
       <h2><span class="stepno">STEP 6</span> Grid-code compliance diagrams</h2>
-      <p class="sub">The two assessment curves of a G99 Type C reactive power study. <b>V–Q diagram</b>: the requirement polygon (dashed) against the plant's <em>maximum reactive capability</em> at each voltage — where the datasheet has no reactive headroom at full output, the inverter curtails active power to free it, so the envelope reflects what the plant can actually produce. <b>P–Q at nominal voltage</b>: the requirement envelope against plant capability over the output range. Capability is at the point of interconnection — net of transformer consumption on the export side, aided by it on the absorption side; inverter capability is taken as symmetric and the capacitor bank counts for export only.</p>
+      <p class="sub">The two assessment curves of a G99 Type C reactive power study. <b>V–Q diagram</b>: the requirement polygon (dashed) against the plant's reactive capability at each voltage <em>while delivering full active power</em> (Registered Capacity) — active power is the priority and is never curtailed for reactive, so the envelope narrows where the inverter is current-limited at low voltage. <b>P–Q at nominal voltage</b>: the requirement envelope against plant capability over the output range. Capability is at the point of interconnection — net of transformer consumption on the export side, aided by it on the absorption side; inverter capability is taken as symmetric and the capacitor bank counts for export only.</p>
       <figure>
-        <svg id="vqDiag" viewBox="0 0 760 360" role="img" aria-label="V-Q diagram: grid code requirement polygon versus maximum plant reactive capability envelope"></svg>
-        <figcaption>V–Q diagram at the connection point — maximum reactive capability (active power curtailed where the datasheet requires it). Consumption (lead) left, production (lag) right.</figcaption>
+        <svg id="vqDiag" viewBox="0 0 760 360" role="img" aria-label="V-Q diagram: grid code requirement polygon versus plant reactive capability at full active power"></svg>
+        <figcaption>V–Q diagram at the connection point — reactive capability while delivering full active power (Registered Capacity). Consumption (lead) left, production (lag) right.</figcaption>
       </figure>
       <figure style="margin-top:16px">
         <svg id="pqDiag" viewBox="0 0 760 400" role="img" aria-label="P-Q diagram at nominal voltage: grid code requirement envelope versus plant capability"></svg>
@@ -609,11 +609,11 @@
       </div>
       <div class="rowscroll" style="margin-top:12px">
         <table class="vtable" id="cornerTable">
-          <thead><tr><th>Point</th><th>V (p.u.)</th><th>Direction</th><th>Q req (MVAr)</th><th>Q avail (MVAr)</th><th>at P (MW)</th><th>Status</th></tr></thead>
+          <thead><tr><th>Point</th><th>V (p.u.)</th><th>Direction</th><th>Q req (MVAr)</th><th>Q avail (MVAr)</th><th>Status</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
-      <div class="note" style="margin-top:10px">Corner points of the V–Q envelope (the A/B/E/F load-flow cases of a G99 study). Q available is the maximum reactive capability at each voltage; “at P (MW)” is the active power delivered there — a ⚠ marks points where active power is curtailed below Registered Capacity to reach that reactive. Full diagrams in Step 6.</div>
+      <div class="note" style="margin-top:10px">Corner points of the V–Q envelope (the A/B/E/F load-flow cases of a G99 study). Q available is the reactive capability while delivering full active power (Registered Capacity) — active power is the priority and is never curtailed for reactive. Full diagrams in Step 6.</div>
     </section>
 
     <section class="card">
@@ -936,23 +936,19 @@ function gcCompliance(s, r) {
     : [["A", fh, "lead"], ["B", fl, "lead"], ["E", fl, "lag"], ["F", fh, "lag"]];
   const corners = cornerDefs.map(([name, V, dir]) => {
     const req = (dir === "lag" ? Qm : QmLead) * gcVqFactor(gc, V, dir);
-    // maximum reactive capability at this voltage (active power curtailed as
-    // needed) — matches the V-Q envelope in the Step 6 diagram
-    const cap = plantMaxQAtV(s, r, V);
+    // reactive capability that remains while delivering full active power
+    // (P-priority) — matches the V-Q envelope in the Step 6 diagram
+    const cap = plantCapPOI(s, r, 1.0, V);
     const capQ = Math.max(0, dir === "lag" ? cap.prod : cap.abs);
     const ok = capQ >= req - 1e-6;
-    // active power delivered while meeting the requirement (full RC if no
-    // curtailment is needed)
-    const pAch = ok ? pAtReq(s, r, V, dir, req) : cap.pAch;
-    const curtailed = ok && pAch < r.P - 1e-3;
     if (!ok) covered = false;
-    return { name, V, dir, req, capQ, pAch, curtailed, ok };
+    return { name, V, dir, req, capQ, allowed: cap.allowed, ok };
   });
   return { pts, corners, covered, worst };
 }
 
 /* ---------- calculation model ---------- */
-function compute(s) {
+function compute(s, _skipRec) {
   const P = num(s.gridLimit);                    // MW
   const pf = clamp(num(s.powerFactor), 0.01, 1);
   const S_plant = pf > 0 ? P / pf : 0;           // MVA
@@ -980,12 +976,15 @@ function compute(s) {
   const Q_for_inv = Math.max(0, Q_total - Q_capbank);              // MVAr
   const P_req = (P + lossSum) * 1000;                              // kW the fleet must generate
 
-  // dispatch model: each inverter runs the active power actually needed,
-  // (grid limit + losses) / N; the reactive capability follows from that
-  // loading. Recommended N is the smallest count covering both P and Q.
-  const N_rec = recommendN(s, S_inv, P_req, Q_for_inv * 1000);
+  // dispatch model (active-power priority): each inverter runs the active
+  // power the plant needs, (grid limit + losses) / N; the reactive capability
+  // is whatever remains at that loading — active power is never sacrificed for
+  // reactive. Recommended N is the smallest count that delivers full active
+  // power AND covers the reactive requirement across the voltage range.
+  // (_skipRec breaks the recommendN→compute recursion during the search.)
   const ovr = s.invCountOverride;
   const manualN = ovr != null && ovr !== "" && num(ovr) > 0;
+  const N_rec = _skipRec ? 0 : recommendN(s, S_inv, P_req, Q_for_inv * 1000);
   const N = manualN ? Math.round(num(ovr)) : N_rec;
   const p_d = N > 0 ? P_req / N : 0;                               // kW dispatched per inverter
   const cN = N > 0 ? invQAtDispatch(s, S_inv, p_d) : { q: 0, ok: false };
@@ -1034,70 +1033,46 @@ function nomMaxLoadingPu(pq) {
   }
   return 0;
 }
-/* Recommended inverter count: the smallest N whose dispatch — (grid limit +
-   losses) / N per inverter — is permitted AND leaves enough reactive
-   capability to cover the demand. Both requirements together, no PF knob. */
+/* Are all grid-code V-Q corner points (A/B/E/F) met while delivering full
+   active power (P-priority) at count r.N? Uses plantCapPOI — the reactive
+   capability that remains at the Registered-Capacity dispatch, no active-power
+   curtailment. */
+function cornersMet(s, r) {
+  const gc = s.gridCode;
+  const fl = num(gc.vFullLo), fh = num(gc.vFullHi);
+  const Qm = gcQreqPu(gc, 1, "lag") * r.P, QmL = gcQreqPu(gc, 1, "lead") * r.P;
+  const defs = gc.vqAsym
+    ? [[fh, "lead"], [1, "lead"], [fl, "lag"], [1, "lag"]]
+    : [[fh, "lead"], [fl, "lead"], [fl, "lag"], [fh, "lag"]];
+  return defs.every(([V, dir]) => {
+    const req = (dir === "lag" ? Qm : QmL) * gcVqFactor(gc, V, dir);
+    const cap = plantCapPOI(s, r, 1.0, V);
+    const capQ = Math.max(0, dir === "lag" ? cap.prod : cap.abs);
+    return capQ >= req - 1e-6;
+  });
+}
+
+/* Recommended inverter count (active-power priority): the smallest N that
+   delivers full active power at nominal AND covers the reactive requirement —
+   both the total demand at nominal and the grid-code V-Q corners across the
+   voltage range — with active power never curtailed. More inverters ⇒ lighter
+   loading each ⇒ more reactive headroom, so the count is monotone in demand.
+   Falls back to the active + nominal-reactive count if the grid-code corners
+   cannot be reached with this inverter (the compliance card then shows the
+   remaining gap). */
 function recommendN(s, S_inv, P_req_kW, Q_req_kvar) {
   if (S_inv <= 0 || P_req_kW <= 0) return 0;
-  let N = Math.max(1, Math.ceil(Math.hypot(P_req_kW, Q_req_kvar) / S_inv) - 1);
-  for (let i = 0; i < 5000; i++, N++) {
-    const c = invQAtDispatch(s, S_inv, P_req_kW / N);
-    if (c.ok && N * c.q >= Q_req_kvar - 1e-6) return N;
-  }
-  return 0; // not achievable with this inverter
-}
-
-/* Maximum reactive capability the plant can deliver at grid voltage V,
-   allowing the inverter to curtail active power. Scans the capability table
-   for the highest permitted Q% at that voltage, taking the highest loading
-   that achieves it (most active power at max Q). Returns plant production /
-   absorption (MVAr, same sign convention as plantCapPOI) and the achievable
-   active power at that operating point. Falls back to the RC-dispatch model
-   when the P-Q table is off. */
-function plantMaxQAtV(s, r, V) {
-  if (r.N <= 0) return { prod: r.Q_capbank - r.Q_xmer, abs: r.Q_xmer, pAch: 0 };
-  if (r.pqActive) {
-    let bestPct = -1, bestLoad = 0;
-    for (const p of s.pq.pLevels) {
-      const c = qCapAt(s.pq, V, p);
-      if (c.allowed && c.pct >= bestPct) { bestPct = c.pct; bestLoad = p; }
+  const startN = Math.max(1, Math.ceil(P_req_kW / (S_inv * 0.9999)));
+  let fallback = 0;
+  for (let N = startN; N < startN + 5000; N++) {
+    const trial = Object.assign({}, s, { invCountOverride: N });
+    const r = compute(trial, true);              // fixed N; skips recommendN
+    if (r.meetsP && r.meetsQ) {
+      if (!fallback) fallback = N;               // covers active + nominal reactive
+      if (cornersMet(trial, r)) return N;        // + grid-code reactive across voltage
     }
-    if (bestPct < 0) return { prod: r.Q_capbank - r.Q_xmer, abs: r.Q_xmer, pAch: 0 };
-    const qPlant = r.N * bestPct / 100 * r.S_inv / 1000;   // MVAr
-    const pAch = r.N * bestLoad * r.S_inv / 1000 - r.lossSum;
-    return { prod: qPlant + r.Q_capbank - r.Q_xmer, abs: qPlant + r.Q_xmer, pAch };
   }
-  // circle / manual model: capability at the RC dispatch point
-  const p_d = (r.P + r.lossSum) * 1000 / r.N;
-  const c = invQCapAt(s, r, p_d, V);
-  const qPlant = r.N * c.q / 1000;
-  return { prod: qPlant + r.Q_capbank - r.Q_xmer, abs: qPlant + r.Q_xmer,
-           pAch: r.N * c.p_used / 1000 - r.lossSum };
-}
-
-/* Active power (MW at grid) at which the plant can still meet a reactive
-   requirement req (MVAr, in the given direction) at voltage V, capped at
-   Registered Capacity. Full RC when the requirement is met at the RC dispatch
-   point; otherwise the highest permitted loading whose reactive capability
-   still covers req (active power traded for reactive). */
-function pAtReq(s, r, V, dir, req) {
-  if (r.N <= 0) return 0;
-  if (!r.pqActive) return r.P;                 // circle model: no table trade-off
-  const reqQinv = 1000 / r.N * (dir === "lag" ? req - r.Q_capbank + r.Q_xmer : req - r.Q_xmer);
-  if (reqQinv <= 0) return r.P;                // met by cap bank / transformer alone
-  const loadRC = (r.P + r.lossSum) * 1000 / (r.N * r.S_inv);
-  // requirement already met at the Registered-Capacity operating point?
-  const cRC = qCapAt(s.pq, V, loadRC);
-  if (cRC.allowed && cRC.pct / 100 * r.S_inv >= reqQinv - 1e-6) return r.P;
-  // otherwise back off to the highest permitted loading that still meets req
-  let best = -1;
-  for (const p of s.pq.pLevels) {
-    if (p >= loadRC) continue;
-    const c = qCapAt(s.pq, V, p);
-    if (c.allowed && c.pct / 100 * r.S_inv >= reqQinv - 1e-6 && p > best) best = p;
-  }
-  if (best < 0) return 0;                       // requirement not achievable at any loading
-  return r.N * best * r.S_inv / 1000 - r.lossSum;
+  return fallback;
 }
 
 function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; }
@@ -1495,12 +1470,12 @@ function drawVQDiagram(r, comp) {
   const Qm = gcQreqPu(gc, 1, "lag") * r.P, QmL = gcQreqPu(gc, 1, "lead") * r.P;
   const vLo = Math.min(gc.vqAsym ? fl : zl, 0.90) - 0.02;
   const vHi = Math.max(gc.vqAsym ? fh : zh, 1.10) + 0.02;
-  // maximum reactive capability over the voltage range — the inverter curtails
-  // active power where the datasheet requires it to free reactive headroom, so
-  // the envelope reflects what the plant can actually produce at each voltage.
+  // reactive capability over the voltage range while delivering full active
+  // power (P-priority): the plant holds Registered Capacity and the envelope
+  // is the reactive that remains at that dispatch — no active-power curtailment.
   const caps = [];
   for (let v = vLo; v <= vHi + 1e-9; v += 0.005) {
-    const cap = plantMaxQAtV(state, r, v);
+    const cap = plantCapPOI(state, r, 1.0, v);
     caps.push({ v, prod: cap.prod, abs: cap.abs });
   }
   const xMax = Math.max(Qm, QmL, ...caps.map(d => Math.max(d.prod, d.abs)), 1) * 1.12;
@@ -1623,15 +1598,14 @@ function renderCornerTable(comp) {
   comp.corners.forEach(pt => {
     const tr = document.createElement("tr");
     const status = pt.ok
-      ? (pt.curtailed ? `<span class="vstatus warn">✓ pass · P curtailed</span>` : `<span class="vstatus ok">✓ pass</span>`)
-      : `<span class="vstatus bad">✕ Q short ${fmt(pt.req - pt.capQ, 1)}</span>`;
+      ? `<span class="vstatus ok">✓ pass</span>`
+      : `<span class="vstatus bad">✕ Q short ${fmt(pt.req - pt.capQ, 1)} MVAr</span>`;
     tr.innerHTML = `
       <td>${pt.name}</td>
       <td>${fmt(pt.V, 2)}</td>
       <td style="font-family:var(--sans)" title="${pt.dir === "lag" ? "Production / export (overexcited)" : "Consumption / absorb (underexcited)"}">${pt.dir === "lag" ? "Lag" : "Lead"}</td>
       <td>${fmt(pt.req, 1)}</td>
       <td>${fmt(pt.capQ, 1)}</td>
-      <td>${fmt(pt.pAch, 1)}${pt.curtailed ? " ⚠" : ""}</td>
       <td>${status}</td>`;
     tb.append(tr);
   });

@@ -25,17 +25,20 @@ injection limit and the reactive power demand.
    Q(t)-mode capability table, editable in place, rendered as a P–Q diagram.
 6. **Grid-code compliance diagrams** *(new, not in the worksheet)* — the two
    assessment curves of a G99 Type C study: the **V–Q diagram** (requirement
-   polygon vs the plant's *maximum reactive capability* at each voltage — the
-   inverter curtails active power where the datasheet has no reactive headroom
-   at full output, so the envelope shows what the plant can actually produce)
-   with the A/B/E/F corner points, and the **P–Q diagram** at nominal voltage.
-   A corner-point table reports, per point, the required and available
-   reactive power and the active power delivered while meeting it (flagging
-   where active power is curtailed below Registered Capacity).
+   polygon vs the plant's reactive capability at each voltage *while delivering
+   full active power* — active power is the priority and is never curtailed for
+   reactive, so the envelope narrows where the inverter is current-limited at
+   low voltage) with the A/B/E/F corner points, and the **P–Q diagram** at
+   nominal voltage. A corner-point table reports the required and available
+   reactive power per point.
 
-The engine was verified against the workbook's cached values: all intermediate
-and final results (MVA rating, MVAr demand, transformer demand, losses,
-apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
+The engine reproduces the workbook's intermediate values exactly (MVA rating
+55.58, MVAr demand 23.60, transformer demand, losses 1.742 MW, apparent power
+59.43 MVA). The **recommended inverter count** now reflects grid-code
+compliance across the voltage range at full active power, so it exceeds the
+worksheet's reactive-only count — 174 for the Belvior defaults with the
+capability table (173 with the circle model) — with the plant delivering the
+full 52.8 MW grid limit.
 
 ## Improvements over the spreadsheet
 
@@ -93,11 +96,12 @@ apparent power, inverter count 164, delivered power 52.908 MW) match exactly.
   covered/not-covered verdict.
 
 - **Live recalculation** — every result updates as you type.
-- **Recommended inverter count** — replaces Excel's manual *Goal Seek* step
-  entirely: the app computes the smallest count whose dispatch is permitted
-  and covers the reactive demand (Belvior defaults: 164 with the circle
-  model, matching the worksheet's goal-seeked count; 166 with the capability
-  table). The equivalent cos φ at dispatch is reported as an output.
+- **Recommended inverter count (active-power priority)** — replaces Excel's
+  manual *Goal Seek* step entirely: the app computes the smallest fleet that
+  delivers full active power AND meets the reactive requirement across the
+  voltage range, with active power never curtailed for reactive (Belvior
+  defaults: 174 with the capability table, 173 with the circle model). The
+  equivalent cos φ at dispatch is reported as an output.
 - **Dynamic rows** — add or remove transformer groups and loss sources instead
   of a fixed layout with empty blocks.
 - **Inverter P–Q capability table & diagram** — enter the manufacturer's
