@@ -355,36 +355,43 @@
   .rpt { max-width: 190mm; margin: 0 auto; padding: 12mm 12mm 20mm; color: #1a1d21;
          font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.55; }
   .rpt h1 { font-size: 26pt; color: #1C5CAB; line-height: 1.2; margin: 0 0 4mm; }
-  .rpt h2 { font-size: 13.5pt; color: #1C5CAB; border-bottom: 2px solid #1C5CAB; padding-bottom: 2px; margin: 9mm 0 4mm; break-after: avoid; }
-  .rpt h3 { font-size: 11pt; color: #1C5CAB; margin: 6mm 0 2mm; break-after: avoid; }
-  .rpt p { margin: 0 0 3mm; text-align: justify; }
-  .rpt section { break-before: page; }
-  .rpt section.flow { break-before: auto; }
-  .rpt table { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 2mm 0 1mm; break-inside: avoid; }
+  .rpt h2 { font-size: 13.5pt; color: #1C5CAB; border-bottom: 2px solid #1C5CAB; padding-bottom: 2px; margin: 9mm 0 4mm; break-after: avoid; page-break-after: avoid; }
+  .rpt h3 { font-size: 11pt; color: #1C5CAB; margin: 6mm 0 2mm; break-after: avoid; page-break-after: avoid; }
+  .rpt p { margin: 0 0 3mm; text-align: justify; orphans: 3; widows: 3; }
+  .rpt section { break-before: page; page-break-before: always; }
+  .rpt section.flow { break-before: auto; page-break-before: auto; }
+  /* keep an atomic block (heading + figure/table + caption) whole on one page */
+  .rpt .keep { break-inside: avoid; page-break-inside: avoid; }
+  .rpt table { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 2mm 0 1mm; break-inside: avoid; page-break-inside: avoid; }
   .rpt table.wide { font-size: 7.8pt; }
   .rpt th { background: #1C5CAB; color: #fff; font-weight: 600; text-align: left; }
   .rpt th, .rpt td { border: 1px solid #c9cfd6; padding: 3px 7px; }
+  .rpt tr { break-inside: avoid; page-break-inside: avoid; }
   .rpt tr:nth-child(even) td { background: #f4f6f8; }
   .rpt td.num, .rpt th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .rpt .tcap, .rpt .fcap { font-size: 8.5pt; color: #52606e; margin: 1mm 0 4mm; }
   .rpt .tcap b, .rpt .fcap b { color: #1C5CAB; }
-  .rpt figure { margin: 3mm 0 1mm; break-inside: avoid; text-align: center; }
-  .rpt figure svg { width: 100%; max-width: 165mm; height: auto; background: #fff; }
-  .rpt figure.small svg { max-width: 118mm; }
+  .rpt figure { margin: 3mm 0 1mm; break-inside: avoid; page-break-inside: avoid; text-align: center; }
+  .rpt figure svg { width: 100%; max-width: 165mm; max-height: 92mm; height: auto; background: #fff; }
+  .rpt figure.small svg { max-width: 118mm; max-height: 78mm; }
   .rpt .chip { display: inline-block; font-size: 8pt; font-weight: 700; padding: 0 6px; border-radius: 8px; }
   .rpt .chip.ok { background: #c9efc9; color: #135813; }
   .rpt .chip.bad { background: #f6c9c9; color: #7c1414; }
-  .rpt .cover { min-height: 232mm; display: flex; flex-direction: column; break-after: page; }
+  .rpt .cover { min-height: 232mm; display: flex; flex-direction: column; break-after: page; page-break-after: always; }
   .rpt .cover .brand { font-size: 10pt; letter-spacing: 3px; color: #52606e; text-transform: uppercase; margin-top: 8mm; }
   .rpt .cover .rule { height: 3px; background: #1C5CAB; width: 42mm; margin: 6mm 0 12mm; }
   .rpt .cover .sub { font-size: 13pt; color: #52606e; margin-bottom: 16mm; }
   .rpt .cover table { max-width: 125mm; font-size: 10pt; }
   .rpt .cover .disclaimer { margin-top: auto; border: 1px solid #c9cfd6; background: #f4f6f8; padding: 4mm 5mm; font-size: 8.5pt; color: #52606e; }
-  .rpt .verdict { border: 2px solid; border-radius: 4px; padding: 4mm 5mm; font-size: 11pt; font-weight: 700; margin: 4mm 0; break-inside: avoid; }
+  .rpt .verdict { border: 2px solid; border-radius: 4px; padding: 4mm 5mm; font-size: 11pt; font-weight: 700; margin: 4mm 0; break-inside: avoid; page-break-inside: avoid; }
   .rpt .verdict.ok { border-color: #2e7d32; color: #1b5e20; background: #edf7ed; }
   .rpt .verdict.bad { border-color: #c62828; color: #8e1515; background: #fdeeee; }
   .rpt ul { margin: 0 0 3mm; padding-left: 6mm; }
   .rpt li { margin-bottom: 1mm; }
+
+  /* deterministic page geometry so pagination does not depend on the print
+     dialog's margin setting (which is what pushed figures across a break) */
+  @page { size: A4; margin: 14mm 13mm 15mm; }
 
   @media print {
     body { background: #fff; }
@@ -2038,35 +2045,41 @@ ${r.pqActive?`
 <h2>3&nbsp;&nbsp;Grid code requirement</h2>
 <p><b>${e(gcLabel)}.</b> ${e(gcNote)}</p>
 <p>The requirement corresponds to Q = ±${n(gcQmaxPu(gc),3)} × P<sub>max</sub> (${n(gcQreqPu(gc,1,"lag")*r.P)} MVAr at the ${n(r.P)} MW Registered Capacity).</p>
-<figure class="small">${figs.gcVQ}<div class="fcap"><b>Figure 1</b> — Reactive power requirement at the connection point, at Registered Capacity.</div></figure>
-<figure class="small">${figs.gcPQ}<div class="fcap"><b>Figure 2</b> — Reactive power requirement at the connection point, below Registered Capacity.</div></figure>
+<div class="keep"><figure class="small">${figs.gcVQ}<div class="fcap"><b>Figure 1</b> — Reactive power requirement at the connection point, at Registered Capacity.</div></figure></div>
+<div class="keep"><figure class="small">${figs.gcPQ}<div class="fcap"><b>Figure 2</b> — Reactive power requirement at the connection point, below Registered Capacity.</div></figure></div>
 </section>
 
 <section>
 <h2>4&nbsp;&nbsp;Sizing results</h2>
 <p>The plant must generate ${n(r.P_total)} MW (grid limit plus internal losses) and ${n(r.Q_total)} MVAr, an apparent power of ${n(r.S_actual)} MVA at angle φ = ${n(Math.atan2(r.Q_total,r.P_total)*180/Math.PI,1)}°.</p>
-<figure class="small">${figs.triangle}<div class="fcap"><b>Figure 3</b> — Power triangle at the plant terminals (losses included).</div></figure>
+<div class="keep"><figure class="small">${figs.triangle}<div class="fcap"><b>Figure 3</b> — Power triangle at the plant terminals (losses included).</div></figure></div>
 <p>${r.N} inverters deliver ${n(r.P_delivered)} MW to the grid (${chip(r.meetsP)}) while compensating ${n(r.Q_compensated)} MVAr against the ${n(r.Q_total)} MVAr demand.</p>
 </section>
 
 <section>
 <h2>5&nbsp;&nbsp;Inverter P–Q capability</h2>
 <p>The inverter capability diagram is drawn from the manufacturer's Q(t)-mode table (Table 6); identical voltage rows are grouped. The marker shows the design operating point — the reactive power each inverter must supply at its dispatched active power.</p>
-<figure>${figs.pqchart}<div class="fcap"><b>Figure 4</b> — Inverter P–Q capability per grid voltage with the design operating point.</div></figure>
+<div class="keep"><figure>${figs.pqchart}<div class="fcap"><b>Figure 4</b> — Inverter P–Q capability per grid voltage with the design operating point.</div></figure></div>
 </section>
 
 <section>
 <h2>6&nbsp;&nbsp;Grid code compliance</h2>
-<h3>6.1&nbsp;&nbsp;V–Q at Registered Capacity</h3>
-<figure>${figs.vqDiag}<div class="fcap"><b>Figure 5</b> — V–Q diagram: requirement polygon vs plant capability while delivering full active power.</div></figure>
-<table>
-  <tr><th>Point</th><th class="num">V (p.u.)</th><th>Direction</th><th class="num">Q required (MVAr)</th><th class="num">Q available (MVAr)</th><th>Status</th></tr>
-  ${cornerRows}
-</table>
-<div class="tcap"><b>Table 7</b> — V–Q envelope corner points at Registered Capacity (the A/B/E/F load-flow cases of a G99-style study).</div>
-<h3>6.2&nbsp;&nbsp;P–Q at nominal voltage</h3>
-<figure>${figs.pqDiag}<div class="fcap"><b>Figure 6</b> — P–Q diagram at the connection point, nominal voltage.</div></figure>
-<div class="verdict ${verdict==="COMPLIANT"?"ok":"bad"}">Overall assessment: ${verdict}</div>
+<div class="keep">
+  <h3>6.1&nbsp;&nbsp;V–Q at Registered Capacity</h3>
+  <figure>${figs.vqDiag}<div class="fcap"><b>Figure 5</b> — V–Q diagram: requirement polygon vs plant capability while delivering full active power.</div></figure>
+</div>
+<div class="keep">
+  <table>
+    <tr><th>Point</th><th class="num">V (p.u.)</th><th>Direction</th><th class="num">Q required (MVAr)</th><th class="num">Q available (MVAr)</th><th>Status</th></tr>
+    ${cornerRows}
+  </table>
+  <div class="tcap"><b>Table 7</b> — V–Q envelope corner points at Registered Capacity (the A/B/E/F load-flow cases of a G99-style study).</div>
+</div>
+<div class="keep">
+  <h3>6.2&nbsp;&nbsp;P–Q at nominal voltage</h3>
+  <figure>${figs.pqDiag}<div class="fcap"><b>Figure 6</b> — P–Q diagram at the connection point, nominal voltage.</div></figure>
+  <div class="verdict ${verdict==="COMPLIANT"?"ok":"bad"}">Overall assessment: ${verdict}</div>
+</div>
 </section>
 
 <section>
