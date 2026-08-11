@@ -671,11 +671,11 @@
       <div class="actions">
         <button id="btnExport" type="button">Export JSON</button>
         <button id="btnImport" type="button">Import JSON</button>
-        <button id="btnPrint" type="button">Generate PDF report</button>
+        <button id="btnPrint" type="button">Print PDF report</button>
         <button id="btnReset" type="button">Reset to Belvior defaults</button>
       </div>
       <input id="fileImport" type="file" accept="application/json" hidden>
-      <div class="note" style="margin-top:12px">Inputs autosave in this browser. Export a JSON file to archive or share a scenario. <em>Generate PDF report</em> opens a print-ready study document — use your browser's “Save as PDF”.</div>
+      <div class="note" style="margin-top:12px">Inputs autosave in this browser. Export a JSON file to archive or share a scenario. <em>Print PDF report</em> builds the study document and opens the print dialog straight away — pick your printer, or choose “Save as PDF”.</div>
     </section>
 
   </aside>
@@ -2081,7 +2081,27 @@ ${verdict==="COMPLIANT"
   overlay.querySelector(".rpt").innerHTML = body;
   document.title = `${state.projectName || "Study"} — Reactive Power Report`;
   overlay.classList.add("open");
+  overlay.scrollTop = 0;
   document.body.style.overflow = "hidden";
+  return overlay;
+}
+
+// Toggle the print-only body class, force layout, and open the print dialog.
+// Must be reached from a user gesture (some browsers ignore programmatic print
+// otherwise). Kept as one helper so the button and the auto-print share it.
+function printReport() {
+  document.body.classList.add("printing-report");
+  const done = () => { document.body.classList.remove("printing-report"); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done);
+  window.print();
+}
+
+// Build the report and go straight to the print dialog in one click. The
+// overlay stays open behind the dialog so the user can review, re-print, or
+// save as PDF again without regenerating.
+function generateAndPrint() {
+  buildReport();
+  printReport();
 }
 
 function ensureReportOverlay() {
@@ -2092,15 +2112,10 @@ function ensureReportOverlay() {
   o.innerHTML = `<div class="rpt-toolbar">
       <button type="button" class="go">Print / Save as PDF</button>
       <button type="button" class="cl">Close</button>
-      <span>In the print dialog choose “Save as PDF”. Enable “Background graphics” for best results.</span>
+      <span>Choose your printer, or “Save as PDF”. Enable “Background graphics” for best results.</span>
     </div><div class="rpt"></div>`;
   document.body.appendChild(o);
-  o.querySelector(".go").addEventListener("click", () => {
-    document.body.classList.add("printing-report");
-    const done = () => { document.body.classList.remove("printing-report"); window.removeEventListener("afterprint", done); };
-    window.addEventListener("afterprint", done);
-    window.print();
-  });
+  o.querySelector(".go").addEventListener("click", printReport);
   o.querySelector(".cl").addEventListener("click", () => {
     o.classList.remove("open");
     document.body.style.overflow = "";
@@ -2108,7 +2123,7 @@ function ensureReportOverlay() {
   return o;
 }
 
-document.getElementById("btnPrint").addEventListener("click", buildReport);
+document.getElementById("btnPrint").addEventListener("click", generateAndPrint);
 document.getElementById("btnReset").addEventListener("click", () => {
   if (!confirm("Replace all current inputs with the Belvior worksheet defaults?")) return;
   state = structuredClone(DEFAULTS);
