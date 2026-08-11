@@ -136,4 +136,13 @@ full 52.8 MW grid limit.
 - **Visuals** — a live power triangle (P/Q/S with φ) and a reactive-demand
   breakdown chart.
 - **Scenarios** — inputs autosave in the browser; export/import JSON to archive
-  or share; print-ready report layout; light and dark themes.
+  or share; light and dark themes.
+- **One-click PDF report** — *Download PDF report* builds a professional
+  multi-page A4 study document (cover, executive summary, inputs & assumptions,
+  grid-code requirement, sizing, inverter P–Q capability, compliance,
+  conclusion) with jsPDF and saves it straight to the device — no browser print
+  dialog. Text is native and selectable, tables are laid out with jsPDF-AutoTable,
+  and the charts are embedded from the live diagrams at high resolution;
+  pagination is controlled in code so a figure or table never splits across a
+  page. jsPDF and its AutoTable plugin are bundled in the single HTML file, so
+  it still works fully offline.
