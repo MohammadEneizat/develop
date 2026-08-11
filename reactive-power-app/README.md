@@ -23,6 +23,10 @@ injection limit and the reactive power demand.
    active delivery and the reactive demand.
 5. **Inverter P–Q capability** *(new, not in the worksheet)* — the datasheet's
    Q(t)-mode capability table, editable in place, rendered as a P–Q diagram.
+   Pre-filled with the **Sungrow SC210HX** (231 kVA / 210 kW) from its TÜV
+   Rheinland VDE-AR-N 4110/4120/4130 test report (No. 968/GI 2194.01/25); the
+   circle model reproduces the report's Tables 4-5/4-6 and Figures 4-2..4-9
+   exactly.
 6. **Grid-code compliance diagrams** *(new, not in the worksheet)* — the two
    assessment curves of a G99 Type C study: the **V–Q diagram** (requirement
    polygon vs the plant's reactive capability at each voltage *while delivering

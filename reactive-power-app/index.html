@@ -528,7 +528,7 @@
     <!-- Step 5: inverter P-Q capability table + diagram -->
     <section class="card">
       <h2><span class="stepno">STEP 5</span> Inverter P–Q capability (datasheet table)</h2>
-      <p class="sub">Fill in the manufacturer's Q(t)-mode table: for each grid voltage, the maximum reactive power (% of rated kVA) at each active-power loading (p.u. of rated kVA). Leave a cell empty for N/A — operation not permitted there. Capacitive and inductive limits are assumed symmetric, as in the datasheet. The diagram below is drawn from these values.</p>
+      <p class="sub">The manufacturer's Q(t)-mode table: for each grid voltage, the maximum reactive power (% of rated kVA) at each active-power loading (p.u. of rated kVA). Leave a cell empty for N/A — operation not permitted there. Capacitive and inductive limits are assumed symmetric, as in the datasheet. The diagram below is drawn from these values. <em>Pre-filled with the Sungrow SC210HX (231 kVA) from its TÜV Rheinland VDE-AR-N 4110/4120/4130 test report — edit for a different inverter.</em></p>
       <div class="rowscroll">
         <table class="pqtable" id="pqTable">
           <thead><tr id="pqHead"></tr></thead>
@@ -643,22 +643,25 @@ const DEFAULTS = {
   pfSense: "Leading",
   xmerMargin: 10,
   gridCode: { preset: "gb_g99", qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10, vqAsym: true, leadRelief: true },
-  invKVA: 363,
+  invKVA: 231,
   capBank: 0,
   invCountOverride: null,
   invQOverride: null,
-  // Q(t)-mode capability: % of rated kVA vs active loading (p.u. of rated kVA),
-  // one row per grid voltage; null = N/A (operation not permitted)
+  // Q(t)-mode capability of the Sungrow SC210HX (231 kVA / 210 kW), from the
+  // TÜV Rheinland VDE-AR-N 4110/4120/4130 test report 968/GI 2194.01/25
+  // (Tables 4-5/4-6, Figures 4-2..4-9). Q in % of rated kVA (231) vs active
+  // loading (p.u. of 231 kVA); null = N/A (operation not permitted).
   pq: {
     use: true,
     pLevels: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
     rows: [
-      { v: 1.10, q: [60, 60, 60, 60, 60, 60, 60, 60, 60, 43.6, 0] },
-      { v: 1.05, q: [60, 60, 60, 60, 60, 60, 60, 60, 60, 43.6, 0] },
-      { v: 1.00, q: [60, 60, 60, 60, 60, 60, 60, 60, 60, 43.6, 0] },
-      { v: 0.95, q: [60, 60, 60, 60, 60, 60, 60, 60, 51.2, 30.4, null] },
-      { v: 0.90, q: [60, 60, 60, 60, 60, 60, 60, 56.6, 41.2, 0, null] },
-      { v: 0.85, q: [60, 60, 60, 60, 60, 60, 60, 48.2, 28.7, null, null] },
+      { v: 0.85, q: [77.3, 77.3, 77.3, 77.3, 75.5, 69.3, 60.8, 49.0, 30.0, null, null] },
+      { v: 0.90, q: [81.8, 81.8, 81.8, 81.8, 81.6, 75.9, 68.3, 58.0, 43.2, 12.8, null] },
+      { v: 0.95, q: [86.4, 86.4, 86.4, 86.4, 86.4, 81.3, 74.2, 64.9, 52.1, 31.8, null] },
+      { v: 1.00, q: [90.9, 90.9, 90.9, 90.9, 90.9, 86.6, 80.0, 71.4, 60.0, 43.6, 0] },
+      { v: 1.05, q: [90.9, 90.9, 90.9, 90.9, 90.9, 86.6, 80.0, 71.4, 60.0, 43.6, 0] },
+      { v: 1.10, q: [90.9, 90.9, 90.9, 90.9, 90.9, 86.6, 80.0, 71.4, 60.0, 43.6, 0] },
+      { v: 1.15, q: [90.9, 90.9, 90.9, 90.9, 90.9, 86.6, 80.0, 71.4, 60.0, 43.6, 0] },
     ],
   },
   xmers: [
