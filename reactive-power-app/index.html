@@ -341,13 +341,63 @@
 
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
+  /* ---------- PDF study report (in-document, printable) ---------- */
+  #reportOverlay { display: none; position: fixed; inset: 0; z-index: 1000; background: #fff; overflow: auto; }
+  #reportOverlay.open { display: block; }
+  .rpt-toolbar {
+    position: sticky; top: 0; background: #1C5CAB; color: #fff; padding: 10px 16px;
+    display: flex; gap: 14px; align-items: center; font-family: var(--sans);
+  }
+  .rpt-toolbar span { font-size: 12.5px; opacity: .9; }
+  .rpt-toolbar button { font-size: 12.5px; font-weight: 700; border: none; border-radius: 5px; padding: 7px 16px; cursor: pointer; }
+  .rpt-toolbar .go { background: #fff; color: #1C5CAB; }
+  .rpt-toolbar .cl { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.5); }
+  .rpt { max-width: 190mm; margin: 0 auto; padding: 12mm 12mm 20mm; color: #1a1d21;
+         font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.55; }
+  .rpt h1 { font-size: 26pt; color: #1C5CAB; line-height: 1.2; margin: 0 0 4mm; }
+  .rpt h2 { font-size: 13.5pt; color: #1C5CAB; border-bottom: 2px solid #1C5CAB; padding-bottom: 2px; margin: 9mm 0 4mm; break-after: avoid; }
+  .rpt h3 { font-size: 11pt; color: #1C5CAB; margin: 6mm 0 2mm; break-after: avoid; }
+  .rpt p { margin: 0 0 3mm; text-align: justify; }
+  .rpt section { break-before: page; }
+  .rpt section.flow { break-before: auto; }
+  .rpt table { width: 100%; border-collapse: collapse; font-size: 9pt; margin: 2mm 0 1mm; break-inside: avoid; }
+  .rpt table.wide { font-size: 7.8pt; }
+  .rpt th { background: #1C5CAB; color: #fff; font-weight: 600; text-align: left; }
+  .rpt th, .rpt td { border: 1px solid #c9cfd6; padding: 3px 7px; }
+  .rpt tr:nth-child(even) td { background: #f4f6f8; }
+  .rpt td.num, .rpt th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .rpt .tcap, .rpt .fcap { font-size: 8.5pt; color: #52606e; margin: 1mm 0 4mm; }
+  .rpt .tcap b, .rpt .fcap b { color: #1C5CAB; }
+  .rpt figure { margin: 3mm 0 1mm; break-inside: avoid; text-align: center; }
+  .rpt figure svg { width: 100%; max-width: 165mm; height: auto; background: #fff; }
+  .rpt figure.small svg { max-width: 118mm; }
+  .rpt .chip { display: inline-block; font-size: 8pt; font-weight: 700; padding: 0 6px; border-radius: 8px; }
+  .rpt .chip.ok { background: #c9efc9; color: #135813; }
+  .rpt .chip.bad { background: #f6c9c9; color: #7c1414; }
+  .rpt .cover { min-height: 232mm; display: flex; flex-direction: column; break-after: page; }
+  .rpt .cover .brand { font-size: 10pt; letter-spacing: 3px; color: #52606e; text-transform: uppercase; margin-top: 8mm; }
+  .rpt .cover .rule { height: 3px; background: #1C5CAB; width: 42mm; margin: 6mm 0 12mm; }
+  .rpt .cover .sub { font-size: 13pt; color: #52606e; margin-bottom: 16mm; }
+  .rpt .cover table { max-width: 125mm; font-size: 10pt; }
+  .rpt .cover .disclaimer { margin-top: auto; border: 1px solid #c9cfd6; background: #f4f6f8; padding: 4mm 5mm; font-size: 8.5pt; color: #52606e; }
+  .rpt .verdict { border: 2px solid; border-radius: 4px; padding: 4mm 5mm; font-size: 11pt; font-weight: 700; margin: 4mm 0; break-inside: avoid; }
+  .rpt .verdict.ok { border-color: #2e7d32; color: #1b5e20; background: #edf7ed; }
+  .rpt .verdict.bad { border-color: #c62828; color: #8e1515; background: #fdeeee; }
+  .rpt ul { margin: 0 0 3mm; padding-left: 6mm; }
+  .rpt li { margin-bottom: 1mm; }
+
   @media print {
-    header.app { position: static; }
-    main { grid-template-columns: 1fr; max-width: none; padding: 12px 0; }
-    .rail { position: static; }
-    .card { box-shadow: none; break-inside: avoid; }
-    .actions, .addrow, button { display: none !important; }
     body { background: #fff; }
+    body.printing-report > *:not(#reportOverlay) { display: none !important; }
+    body.printing-report #reportOverlay { position: static; display: block; overflow: visible; }
+    body.printing-report .rpt-toolbar { display: none !important; }
+    body.printing-report .rpt { max-width: none; margin: 0; padding: 0; }
+    body:not(.printing-report) header.app { position: static; }
+    body:not(.printing-report) main { grid-template-columns: 1fr; max-width: none; padding: 12px 0; }
+    body:not(.printing-report) .rail { position: static; }
+    body:not(.printing-report) .card { box-shadow: none; break-inside: avoid; }
+    body:not(.printing-report) .actions, body:not(.printing-report) .addrow, body:not(.printing-report) button { display: none !important; }
+    @page { size: A4; margin: 16mm 15mm 20mm; }
   }
 </style>
 </head>
@@ -565,7 +615,7 @@
 
   </div>
 
-  <!-- Results rail -->
+  <!-- Results rail (report overlay is appended to body by script) -->
   <aside class="col rail">
 
     <section class="card">
@@ -621,11 +671,11 @@
       <div class="actions">
         <button id="btnExport" type="button">Export JSON</button>
         <button id="btnImport" type="button">Import JSON</button>
-        <button id="btnPrint" type="button">Print report</button>
+        <button id="btnPrint" type="button">Generate PDF report</button>
         <button id="btnReset" type="button">Reset to Belvior defaults</button>
       </div>
       <input id="fileImport" type="file" accept="application/json" hidden>
-      <div class="note" style="margin-top:12px">Inputs autosave in this browser. Export a JSON file to archive or share a scenario.</div>
+      <div class="note" style="margin-top:12px">Inputs autosave in this browser. Export a JSON file to archive or share a scenario. <em>Generate PDF report</em> opens a print-ready study document — use your browser's “Save as PDF”.</div>
     </section>
 
   </aside>
@@ -1847,7 +1897,218 @@ document.getElementById("fileImport").addEventListener("change", async e => {
   }
   e.target.value = "";
 });
-document.getElementById("btnPrint").addEventListener("click", () => window.print());
+/* ---------- PDF study report ---------- */
+/* Builds a print-ready study document into an in-document overlay (works
+   inside the sandboxed artifact frame, where popups are blocked) and prints
+   it via the browser's Save-as-PDF. Charts are captured in light theme so
+   they print correctly even from dark mode. */
+function buildReport() {
+  const overlay = ensureReportOverlay();
+  // capture the live SVG charts in light theme
+  const root = document.documentElement;
+  const prevTheme = root.getAttribute("data-theme");
+  root.setAttribute("data-theme", "light");
+  update();
+  const svgOf = id => { const el = document.getElementById(id); return el ? el.outerHTML : ""; };
+  const figs = { gcVQ: svgOf("gcVQ"), gcPQ: svgOf("gcPQ"), triangle: svgOf("triangle"),
+                 pqchart: svgOf("pqchart"), vqDiag: svgOf("vqDiag"), pqDiag: svgOf("pqDiag") };
+  if (prevTheme === null) root.removeAttribute("data-theme"); else root.setAttribute("data-theme", prevTheme);
+  update();
+
+  const r = compute(state);
+  const comp = gcCompliance(state, r);
+  const gc = state.gridCode;
+  const gcLabel = GC_PRESETS[gc.preset] ? GC_PRESETS[gc.preset].label : "Custom requirement";
+  const gcNote = GC_PRESETS[gc.preset] ? GC_PRESETS[gc.preset].note : "Custom envelope parameters — see Section 3.";
+  const today = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+  const proj = escapeHtml(state.projectName || "Untitled project");
+  const e = escapeHtml, n = (v, dp = 2) => fmt(v, dp);
+  const chip = ok => ok ? `<span class="chip ok">PASS</span>` : `<span class="chip bad">FAIL</span>`;
+  const verdict = comp.covered && r.meets ? "COMPLIANT" : "NOT COMPLIANT";
+  const qSrc = r.pqActive ? "manufacturer P–Q capability table (Section 2.4)"
+    : r.qOvr ? "manually specified value" : "derived as √(S² − P²)";
+
+  const xmerRows = r.xmers.filter(x => num(x.qty) > 0).map(x =>
+    `<tr><td>${e(x.name)}</td><td class="num">${n(num(x.qty),0)}</td><td class="num">${n(num(x.rating),0)}</td><td class="num">${n(num(x.z),1)}</td><td class="num">${n(x.kvar,1)}</td></tr>`).join("");
+  const lossRows = r.losses.map(l =>
+    `<tr><td>${e(l.name)}</td><td class="num">${n(num(l.pct),2)}</td><td class="num">${n(l.mw,3)}</td></tr>`).join("");
+  const pqHead = state.pq.pLevels.map(p => `<th class="num">${p.toFixed(1)}</th>`).join("");
+  const pqRows = [...state.pq.rows].sort((a,b) => num(b.v)-num(a.v)).map(row =>
+    `<tr><td class="num"><b>${n(num(row.v),2)}</b></td>` +
+    row.q.map(q => `<td class="num">${q==null||q===""?"N/A":n(num(q),1)}</td>`).join("") + `</tr>`).join("");
+  const cornerRows = comp.corners.map(pt =>
+    `<tr><td>${pt.name}</td><td class="num">${n(pt.V,2)}</td><td>${pt.dir==="lag"?"Lagging (export)":"Leading (absorb)"}</td><td class="num">${n(pt.req,1)}</td><td class="num">${n(pt.capQ,1)}</td><td>${pt.ok?chip(true):chip(false)}</td></tr>`).join("");
+  const fails = [];
+  if (!r.meetsP) fails.push("the delivered active power falls short of the grid injection limit");
+  if (!r.meetsQ) fails.push("the compensated reactive power falls short of the total demand");
+  comp.corners.filter(pt => !pt.ok).forEach(pt => fails.push(`V–Q corner point ${pt.name} (${n(pt.V,2)} p.u., ${pt.dir==="lag"?"export":"absorb"}) is not met`));
+
+  const body = `
+<div class="cover">
+  <div class="brand">Reactive Power Compensation Sizing</div>
+  <div class="rule"></div>
+  <h1>${proj}</h1>
+  <div class="sub">Reactive Power Compensation Sizing &amp; Grid Code Compliance Study</div>
+  <table>
+    <tr><th style="width:40%">Project</th><td>${proj}</td></tr>
+    <tr><th>Date</th><td>${today}</td></tr>
+    <tr><th>Grid code assessed</th><td>${e(gcLabel)}</td></tr>
+    <tr><th>Grid injection limit (RC)</th><td>${n(r.P)} MW</td></tr>
+    <tr><th>Inverters in design</th><td>${r.N} × ${n(r.S_inv,0)} kVA${r.manualN?" (fixed)":" (recommended)"}</td></tr>
+    <tr><th>Overall result</th><td><b>${verdict}</b></td></tr>
+  </table>
+  <div class="disclaimer"><b>Scope &amp; limitations.</b> This document was generated by an analytic screening tool. Capability is evaluated at the point of interconnection with transformer reactive consumption represented as a constant demand and no network load-flow, cable impedance or internal voltage-constraint modelling. Grid-code parameters are typical published values and must be confirmed against the applicable interconnection agreement. This report does not replace a certified power-system study.</div>
+</div>
+
+<section class="flow">
+<h2>1&nbsp;&nbsp;Executive summary</h2>
+<p>This study sizes the reactive power compensation of the <b>${proj}</b> solar PV plant and assesses its compliance with <b>${e(gcLabel)}</b>. The plant exports up to <b>${n(r.P)} MW</b> at the point of interconnection at a design power factor of ${n(r.pf,3)} ${e(state.pfSense).toLowerCase()}, giving a total reactive power demand of <b>${n(r.Q_total)} MVAr</b>.</p>
+<p>Active power is treated as the priority: each of the <b>${r.N} inverters</b> (${n(r.S_inv,0)} kVA) dispatches ${n(r.p_inv,1)} kW (equivalent cos φ ${n(r.pf_inv,3)}), delivering the full <b>${n(r.P_delivered)} MW</b> to the grid, and the reactive capability is whatever remains at that loading (${qSrc})${r.Q_capbank>0?`, aided by a ${n(r.Q_capbank)} MVAr capacitor bank`:""}. The fleet is sized so the reactive requirement is met across the voltage range without curtailing active power.</p>
+${verdict==="COMPLIANT"
+  ? `<p>The assessment finds the design <b>compliant</b>: the plant delivers full active power and meets the grid-code reactive requirement at all V–Q corner points at Registered Capacity.</p>`
+  : `<p>The assessment finds the design <b>not compliant</b>: ${fails.map(e).join("; ")}. Mitigation options include additional inverters or a capacitor bank (see Section 6).</p>`}
+<table>
+  <tr><th>Quantity</th><th class="num">Value</th><th>Unit</th></tr>
+  <tr><td>Plant MVA rating</td><td class="num">${n(r.S_plant)}</td><td>MVA</td></tr>
+  <tr><td>Grid reactive demand (PF requirement)</td><td class="num">${n(r.Q_grid)}</td><td>MVAr</td></tr>
+  <tr><td>Transformer reactive consumption (incl. ${n(num(state.xmerMargin),0)}% margin)</td><td class="num">${n(r.Q_xmer)}</td><td>MVAr</td></tr>
+  <tr><td>Total reactive demand</td><td class="num">${n(r.Q_total)}</td><td>MVAr</td></tr>
+  <tr><td>Total system losses</td><td class="num">${n(r.lossSum,3)}</td><td>MW</td></tr>
+  <tr><td>Actual apparent power</td><td class="num">${n(r.S_actual)}</td><td>MVA</td></tr>
+  <tr><td>Inverters in design</td><td class="num">${r.N}</td><td>nos.</td></tr>
+  <tr><td>Power delivered to grid</td><td class="num">${n(r.P_delivered)}</td><td>MW</td></tr>
+  <tr><td>Delivery check</td><td colspan="2">${chip(r.meetsP)}</td></tr>
+  <tr><td>Grid-code compliance</td><td colspan="2">${chip(comp.covered)}</td></tr>
+</table>
+<div class="tcap"><b>Table 1</b> — Key results.</div>
+</section>
+
+<section>
+<h2>2&nbsp;&nbsp;Inputs and assumptions</h2>
+<h3>2.1&nbsp;&nbsp;Grid connection</h3>
+<table>
+  <tr><th>Parameter</th><th class="num">Value</th><th>Unit</th></tr>
+  <tr><td>Grid injection limit / Registered Capacity</td><td class="num">${n(r.P)}</td><td>MW</td></tr>
+  <tr><td>Design power factor at POI</td><td class="num">${n(r.pf,3)}</td><td>${e(state.pfSense)}</td></tr>
+  ${state.installedDC?`<tr><td>Installed DC capacity</td><td class="num">${n(num(state.installedDC))}</td><td>MWp</td></tr>`:""}
+</table>
+<div class="tcap"><b>Table 2</b> — Grid connection parameters.</div>
+<h3>2.2&nbsp;&nbsp;Transformers</h3>
+<table>
+  <tr><th>Group</th><th class="num">Qty</th><th class="num">Rating (kVA)</th><th class="num">Z (%)</th><th class="num">Q (kVAr)</th></tr>
+  ${xmerRows}
+  <tr><td><b>Total incl. ${n(num(state.xmerMargin),0)}% margin</b></td><td colspan="3"></td><td class="num"><b>${n(r.Q_xmer*1000,0)}</b></td></tr>
+</table>
+<div class="tcap"><b>Table 3</b> — Transformer reactive consumption (Q = qty × rating × Z%).</div>
+<h3>2.3&nbsp;&nbsp;System losses</h3>
+<table>
+  <tr><th>Loss source</th><th class="num">Fraction (%)</th><th class="num">Loss (MW)</th></tr>
+  ${lossRows}
+  <tr><td><b>Total</b></td><td></td><td class="num"><b>${n(r.lossSum,3)}</b></td></tr>
+</table>
+<div class="tcap"><b>Table 4</b> — Internal system losses applied to the grid injection limit.</div>
+<h3>2.4&nbsp;&nbsp;Inverter</h3>
+<table>
+  <tr><th>Parameter</th><th class="num">Value</th><th>Unit</th></tr>
+  <tr><td>Apparent power rating</td><td class="num">${n(r.S_inv,0)}</td><td>kVA</td></tr>
+  <tr><td>Dispatched active power per inverter</td><td class="num">${n(r.p_inv,1)}</td><td>kW</td></tr>
+  <tr><td>Equivalent power factor at dispatch</td><td class="num">${n(r.pf_inv,3)}</td><td>cos φ</td></tr>
+  <tr><td>Reactive capability per inverter</td><td class="num">${n(r.q_inv,1)}</td><td>kVAr</td></tr>
+  <tr><td>Capacitor bank</td><td class="num">${n(r.Q_capbank)}</td><td>MVAr</td></tr>
+  <tr><td>Inverter count</td><td colspan="2">${r.manualN?`Fixed at ${r.N} (recommended ${r.N_req})`:`Recommended: ${r.N}`}</td></tr>
+</table>
+<div class="tcap"><b>Table 5</b> — Inverter and compensation parameters.</div>
+${r.pqActive?`
+<table class="wide">
+  <tr><th class="num">V (p.u.) \\ P (p.u.)</th>${pqHead}</tr>
+  ${pqRows}
+</table>
+<div class="tcap"><b>Table 6</b> — Manufacturer Q(t)-mode capability: maximum reactive power in % of rated kVA per grid voltage and active-power loading (N/A = operation not permitted).</div>`:""}
+<h3>2.5&nbsp;&nbsp;Assumptions</h3>
+<ul>
+  <li>Active power is the priority: each inverter dispatches (grid limit + losses) ÷ count and is never curtailed to gain reactive power.</li>
+  <li>The fleet is sized so the reactive requirement is met across the voltage range at full active power.</li>
+  <li>Inverter reactive capability is taken as symmetric (equal export and absorption).</li>
+  <li>Transformer reactive consumption is a constant demand; export capability at the POI is net of it, absorption capability is aided by it.</li>
+  <li>The capacitor bank contributes to export only and is assumed switched out for absorption.</li>
+</ul>
+</section>
+
+<section>
+<h2>3&nbsp;&nbsp;Grid code requirement</h2>
+<p><b>${e(gcLabel)}.</b> ${e(gcNote)}</p>
+<p>The requirement corresponds to Q = ±${n(gcQmaxPu(gc),3)} × P<sub>max</sub> (${n(gcQreqPu(gc,1,"lag")*r.P)} MVAr at the ${n(r.P)} MW Registered Capacity).</p>
+<figure class="small">${figs.gcVQ}<div class="fcap"><b>Figure 1</b> — Reactive power requirement at the connection point, at Registered Capacity.</div></figure>
+<figure class="small">${figs.gcPQ}<div class="fcap"><b>Figure 2</b> — Reactive power requirement at the connection point, below Registered Capacity.</div></figure>
+</section>
+
+<section>
+<h2>4&nbsp;&nbsp;Sizing results</h2>
+<p>The plant must generate ${n(r.P_total)} MW (grid limit plus internal losses) and ${n(r.Q_total)} MVAr, an apparent power of ${n(r.S_actual)} MVA at angle φ = ${n(Math.atan2(r.Q_total,r.P_total)*180/Math.PI,1)}°.</p>
+<figure class="small">${figs.triangle}<div class="fcap"><b>Figure 3</b> — Power triangle at the plant terminals (losses included).</div></figure>
+<p>${r.N} inverters deliver ${n(r.P_delivered)} MW to the grid (${chip(r.meetsP)}) while compensating ${n(r.Q_compensated)} MVAr against the ${n(r.Q_total)} MVAr demand.</p>
+</section>
+
+<section>
+<h2>5&nbsp;&nbsp;Inverter P–Q capability</h2>
+<p>The inverter capability diagram is drawn from the manufacturer's Q(t)-mode table (Table 6); identical voltage rows are grouped. The marker shows the design operating point — the reactive power each inverter must supply at its dispatched active power.</p>
+<figure>${figs.pqchart}<div class="fcap"><b>Figure 4</b> — Inverter P–Q capability per grid voltage with the design operating point.</div></figure>
+</section>
+
+<section>
+<h2>6&nbsp;&nbsp;Grid code compliance</h2>
+<h3>6.1&nbsp;&nbsp;V–Q at Registered Capacity</h3>
+<figure>${figs.vqDiag}<div class="fcap"><b>Figure 5</b> — V–Q diagram: requirement polygon vs plant capability while delivering full active power.</div></figure>
+<table>
+  <tr><th>Point</th><th class="num">V (p.u.)</th><th>Direction</th><th class="num">Q required (MVAr)</th><th class="num">Q available (MVAr)</th><th>Status</th></tr>
+  ${cornerRows}
+</table>
+<div class="tcap"><b>Table 7</b> — V–Q envelope corner points at Registered Capacity (the A/B/E/F load-flow cases of a G99-style study).</div>
+<h3>6.2&nbsp;&nbsp;P–Q at nominal voltage</h3>
+<figure>${figs.pqDiag}<div class="fcap"><b>Figure 6</b> — P–Q diagram at the connection point, nominal voltage.</div></figure>
+<div class="verdict ${verdict==="COMPLIANT"?"ok":"bad"}">Overall assessment: ${verdict}</div>
+</section>
+
+<section>
+<h2>7&nbsp;&nbsp;Conclusion</h2>
+${verdict==="COMPLIANT"
+  ? `<p>The ${proj} plant, with ${r.N} × ${n(r.S_inv,0)} kVA inverters${r.Q_capbank>0?` and a ${n(r.Q_capbank)} MVAr capacitor bank`:""}, delivers its full ${n(r.P)} MW Registered Capacity and meets the reactive power requirements of ${e(gcLabel)} across the voltage range without curtailing active power.</p>
+<p>The design should be confirmed with a full network load-flow study including cable and transformer impedances, internal voltage constraints and the DNO/TSO's specific connection conditions.</p>`
+  : `<p>The assessed configuration does not meet the requirements of ${e(gcLabel)}: ${fails.map(e).join("; ")}.</p>
+<p>Possible mitigations: increasing the inverter count, adding a capacitor bank, or selecting inverters with stronger low-voltage reactive capability. The design should subsequently be confirmed with a full network load-flow study.</p>`}
+</section>`;
+
+  overlay.querySelector(".rpt").innerHTML = body;
+  document.title = `${state.projectName || "Study"} — Reactive Power Report`;
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function ensureReportOverlay() {
+  let o = document.getElementById("reportOverlay");
+  if (o) return o;
+  o = document.createElement("div");
+  o.id = "reportOverlay";
+  o.innerHTML = `<div class="rpt-toolbar">
+      <button type="button" class="go">Print / Save as PDF</button>
+      <button type="button" class="cl">Close</button>
+      <span>In the print dialog choose “Save as PDF”. Enable “Background graphics” for best results.</span>
+    </div><div class="rpt"></div>`;
+  document.body.appendChild(o);
+  o.querySelector(".go").addEventListener("click", () => {
+    document.body.classList.add("printing-report");
+    const done = () => { document.body.classList.remove("printing-report"); window.removeEventListener("afterprint", done); };
+    window.addEventListener("afterprint", done);
+    window.print();
+  });
+  o.querySelector(".cl").addEventListener("click", () => {
+    o.classList.remove("open");
+    document.body.style.overflow = "";
+  });
+  return o;
+}
+
+document.getElementById("btnPrint").addEventListener("click", buildReport);
 document.getElementById("btnReset").addEventListener("click", () => {
   if (!confirm("Replace all current inputs with the Belvior worksheet defaults?")) return;
   state = structuredClone(DEFAULTS);
