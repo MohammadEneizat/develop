@@ -341,6 +341,12 @@
 
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
+  /* PDF-ready banner (fallback link for sandboxed frames / mobile) */
+  #pdfReady { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--good); background: var(--good-bg); border-radius: 8px; }
+  #pdfReady .pdf-ready-link { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; font-weight: 700; font-size: 14px; padding: 10px 18px; border-radius: 6px; }
+  #pdfReady .pdf-ready-link:hover { filter: brightness(1.08); }
+  #pdfReady .pdf-ready-hint { font-size: 12px; color: var(--ink-2); margin-top: 8px; line-height: 1.4; }
+
   /* ---------- PDF study report (in-document, printable) ---------- */
   #reportOverlay { display: none; position: fixed; inset: 0; z-index: 1000; background: #fff; overflow: auto; }
   #reportOverlay.open { display: block; }
@@ -2624,7 +2630,40 @@ function buildPdf(imgs) {
 
   doc.setProperties({ title: `${proj} — Reactive Power Compensation Study`, subject: "Reactive power compensation sizing & grid code compliance", author: "Reactive Power Compensation Sizing tool" });
   const fname = (proj.replace(/[^\w \-]+/g, "").trim() || "Reactive Power") + " - Reactive Power Report.pdf";
-  doc.save(fname);
+  deliverPdf(doc, fname);
+}
+
+// Deliver the finished PDF as reliably as possible. A plain doc.save() is
+// silently blocked in sandboxed iframes (e.g. the embedded artifact preview)
+// and on some mobile browsers, so we ALSO surface a real, user-clickable link
+// on the page — tapping that opens/saves the PDF even where auto-download is
+// blocked.
+function deliverPdf(doc, fname) {
+  let url = null;
+  try { url = doc.output("bloburl"); } catch (e) { /* older engines */ }
+  if (url) showPdfLink(url, fname);
+  try { doc.save(fname); } catch (e) { /* blocked — the link above still works */ }
+}
+
+function showPdfLink(url, fname) {
+  let box = document.getElementById("pdfReady");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "pdfReady";
+    const btn = document.getElementById("btnPrint");
+    const host = btn ? (btn.closest(".actions") || btn.parentElement) : document.body;
+    host.insertAdjacentElement("afterend", box);
+  }
+  box.innerHTML = "";
+  const a = document.createElement("a");
+  a.href = url; a.download = fname; a.target = "_blank"; a.rel = "noopener";
+  a.className = "pdf-ready-link";
+  a.textContent = "⬇  Open / save your PDF report";
+  const hint = document.createElement("div");
+  hint.className = "pdf-ready-hint";
+  hint.textContent = "Your report is ready. If it didn’t save automatically, tap the button above to open the PDF, then use your browser’s share or save option. (In the embedded preview, downloads can be blocked — opening this app in its own browser tab saves the file directly.)";
+  box.append(a, hint);
+  box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 document.getElementById("btnPrint").addEventListener("click", downloadReport);
