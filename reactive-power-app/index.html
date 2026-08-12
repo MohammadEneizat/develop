@@ -2653,12 +2653,17 @@ function buildPdf(imgs) {
 // on the page — tapping that opens/saves the PDF even where auto-download is
 // blocked.
 function deliverPdf(doc, fname) {
-  let url = null;
-  try { url = doc.output("bloburl"); } catch (e) { /* try data URI next */ }
-  if (!url) { try { url = doc.output("datauristring"); } catch (e) { /* give up on link */ } }
-  if (url) showPdfLink(url, fname);
-  else setPdfStatus("The report was built but this view blocked opening it. Open the app in its own browser tab and try again.", true);
-  try { doc.save(fname); } catch (e) { /* auto-download blocked — the link still works */ }
+  // Prefer a data: URL for the on-page link: the sandboxed artifact preview's
+  // CSP permits data: but usually blocks blob:, so a data: link is the version
+  // most likely to actually open. Fall back to blob: for plain local use.
+  let dataUri = null, blobUrl = null;
+  try { dataUri = doc.output("datauristring", { filename: fname }); } catch (e) { /* fall through */ }
+  try { blobUrl = doc.output("bloburl"); } catch (e) { /* fall through */ }
+  const linkUrl = dataUri || blobUrl;
+  if (linkUrl) showPdfLink(linkUrl, fname);
+  else setPdfStatus("The report was built but this view blocked opening it. Open this app in its own browser tab, or open the HTML file locally, and try again.", true);
+  // best-effort automatic download (works outside the sandbox)
+  try { doc.save(fname); } catch (e) { /* blocked — the link above still works */ }
 }
 
 // The "PDF ready" / status banner shown below the Scenario buttons. Created on
