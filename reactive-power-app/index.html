@@ -2327,60 +2327,74 @@ document.getElementById("fileImport").addEventListener("change", async e => {
    live SVGs at high resolution. Page breaks are decided in code, so a figure
    or a table row never gets split across a page. */
 
-// Rasterise an on-page SVG chart to a high-DPI PNG data URL.
-// Resolves to { data, w, h } (w/h = SVG intrinsic size, for aspect ratio).
+// Rasterise an on-page SVG chart to a PNG data URL. Resolves to { data, w, h }
+// or null if it fails/times out — the report is still built without that chart,
+// so a browser that taints the canvas or stalls can never block the whole PDF.
 function svgToPng(id, scale) {
   return new Promise((resolve) => {
-    const el = document.getElementById(id);
-    if (!el) { resolve(null); return; }
-    const vb = el.viewBox && el.viewBox.baseVal;
-    const w = vb && vb.width ? vb.width : (el.clientWidth || 760);
-    const h = vb && vb.height ? vb.height : (el.clientHeight || 400);
-    const clone = el.cloneNode(true);
-    clone.setAttribute("width", w);
-    clone.setAttribute("height", h);
-    clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    bg.setAttribute("x", 0); bg.setAttribute("y", 0);
-    bg.setAttribute("width", w); bg.setAttribute("height", h);
-    bg.setAttribute("fill", "#ffffff");
-    clone.insertBefore(bg, clone.firstChild);
-    const xml = new XMLSerializer().serializeToString(clone);
-    const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
-    const img = new Image();
-    img.onload = () => {
-      const cv = document.createElement("canvas");
-      cv.width = Math.round(w * scale); cv.height = Math.round(h * scale);
-      const ctx = cv.getContext("2d");
-      ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, cv.width, cv.height);
-      ctx.drawImage(img, 0, 0, cv.width, cv.height);
-      resolve({ data: cv.toDataURL("image/png"), w, h });
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
+    const timer = setTimeout(() => finish(null), 6000);
+    try {
+      const el = document.getElementById(id);
+      if (!el) { finish(null); return; }
+      const vb = el.viewBox && el.viewBox.baseVal;
+      const w = vb && vb.width ? vb.width : (el.clientWidth || 760);
+      const h = vb && vb.height ? vb.height : (el.clientHeight || 400);
+      const clone = el.cloneNode(true);
+      clone.setAttribute("width", w);
+      clone.setAttribute("height", h);
+      clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      bg.setAttribute("x", 0); bg.setAttribute("y", 0);
+      bg.setAttribute("width", w); bg.setAttribute("height", h);
+      bg.setAttribute("fill", "#ffffff");
+      clone.insertBefore(bg, clone.firstChild);
+      const xml = new XMLSerializer().serializeToString(clone);
+      // base64 data URI renders more reliably on mobile browsers than a
+      // percent-encoded one
+      const url = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(xml)));
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const cv = document.createElement("canvas");
+          cv.width = Math.round(w * scale); cv.height = Math.round(h * scale);
+          const ctx = cv.getContext("2d");
+          ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, cv.width, cv.height);
+          ctx.drawImage(img, 0, 0, cv.width, cv.height);
+          finish({ data: cv.toDataURL("image/png"), w, h });
+        } catch (e) { finish(null); }
+      };
+      img.onerror = () => finish(null);
+      img.src = url;
+    } catch (e) { finish(null); }
   });
 }
 
 async function downloadReport() {
-  if (!window.jspdf || !window.jspdf.jsPDF) { alert("PDF engine failed to load."); return; }
   const btn = document.getElementById("btnPrint");
   const label = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "Generating PDF…"; }
+  setPdfStatus("Generating your PDF report… this can take a few seconds.");
   try {
-    // capture charts in light theme at high DPI, then restore the live theme
+    if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("PDF engine not loaded");
+    // capture charts in light theme, then restore the live theme. Each chart is
+    // independently guarded, so one failing chart never aborts the report.
     const root = document.documentElement;
     const prevTheme = root.getAttribute("data-theme");
     root.setAttribute("data-theme", "light");
     update();
     const ids = ["gcVQ", "gcPQ", "triangle", "pqchart", "vqDiag", "pqDiag"];
     const imgs = {};
-    for (const id of ids) imgs[id] = await svgToPng(id, 3);
+    // rasterise all charts in parallel so one slow/timing-out chart can't stack
+    const results = await Promise.all(ids.map(id => svgToPng(id, 2.5).catch(() => null)));
+    ids.forEach((id, i) => { imgs[id] = results[i]; });
     if (prevTheme === null) root.removeAttribute("data-theme"); else root.setAttribute("data-theme", prevTheme);
     update();
     buildPdf(imgs);
   } catch (err) {
     console.error(err);
-    alert("Could not generate the PDF: " + (err && err.message ? err.message : err));
+    setPdfStatus("Sorry — the PDF could not be generated in this view (" + (err && err.message ? err.message : err) + "). Try opening this app in its own browser tab.", true);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = label; }
   }
@@ -2640,12 +2654,16 @@ function buildPdf(imgs) {
 // blocked.
 function deliverPdf(doc, fname) {
   let url = null;
-  try { url = doc.output("bloburl"); } catch (e) { /* older engines */ }
+  try { url = doc.output("bloburl"); } catch (e) { /* try data URI next */ }
+  if (!url) { try { url = doc.output("datauristring"); } catch (e) { /* give up on link */ } }
   if (url) showPdfLink(url, fname);
-  try { doc.save(fname); } catch (e) { /* blocked — the link above still works */ }
+  else setPdfStatus("The report was built but this view blocked opening it. Open the app in its own browser tab and try again.", true);
+  try { doc.save(fname); } catch (e) { /* auto-download blocked — the link still works */ }
 }
 
-function showPdfLink(url, fname) {
+// The "PDF ready" / status banner shown below the Scenario buttons. Created on
+// demand so we never depend on markup that a sandbox might strip.
+function ensurePdfBox() {
   let box = document.getElementById("pdfReady");
   if (!box) {
     box = document.createElement("div");
@@ -2654,7 +2672,26 @@ function showPdfLink(url, fname) {
     const host = btn ? (btn.closest(".actions") || btn.parentElement) : document.body;
     host.insertAdjacentElement("afterend", box);
   }
+  return box;
+}
+
+function setPdfStatus(msg, isError) {
+  const box = ensurePdfBox();
   box.innerHTML = "";
+  box.style.borderColor = isError ? "var(--crit)" : "var(--hairline)";
+  box.style.background = isError ? "var(--crit-bg)" : "var(--surface-2)";
+  const p = document.createElement("div");
+  p.className = "pdf-ready-hint";
+  p.style.marginTop = "0";
+  p.textContent = msg;
+  box.append(p);
+}
+
+function showPdfLink(url, fname) {
+  const box = ensurePdfBox();
+  box.innerHTML = "";
+  box.style.borderColor = "var(--good)";
+  box.style.background = "var(--good-bg)";
   const a = document.createElement("a");
   a.href = url; a.download = fname; a.target = "_blank"; a.rel = "noopener";
   a.className = "pdf-ready-link";
