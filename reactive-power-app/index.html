@@ -2409,7 +2409,7 @@ async function downloadReport() {
     ids.forEach((id, i) => { imgs[id] = results[i]; });
     if (prevTheme === null) root.removeAttribute("data-theme"); else root.setAttribute("data-theme", prevTheme);
     update();
-    buildPdf(imgs);
+    await buildPdf(imgs);
   } catch (err) {
     console.error(err);
     setPdfStatus("Sorry — the PDF could not be generated in this view (" + (err && err.message ? err.message : err) + "). Try opening this app in its own browser tab.", true);
@@ -2418,7 +2418,7 @@ async function downloadReport() {
   }
 }
 
-function buildPdf(imgs) {
+async function buildPdf(imgs) {
   const r = compute(state);
   const comp = gcCompliance(state, r);
   const gc = state.gridCode;
@@ -2666,25 +2666,42 @@ function buildPdf(imgs) {
 
   doc.setProperties({ title: `${proj} — Reactive Power Compensation Study`, subject: "Reactive power compensation sizing & grid code compliance", author: "Reactive Power Compensation Sizing tool" });
   const fname = (proj.replace(/[^\w \-]+/g, "").trim() || "Reactive Power") + " - Reactive Power Report.pdf";
-  deliverPdf(doc, fname);
+  await deliverPdf(doc, fname);
 }
 
-// Deliver the finished PDF as reliably as possible. A plain doc.save() is
-// silently blocked in sandboxed iframes (e.g. the embedded artifact preview)
-// and on some mobile browsers, so we ALSO surface a real, user-clickable link
-// on the page — tapping that opens/saves the PDF even where auto-download is
-// blocked.
-function deliverPdf(doc, fname) {
-  // Prefer a data: URL for the on-page link: the sandboxed artifact preview's
-  // CSP permits data: but usually blocks blob:, so a data: link is the version
-  // most likely to actually open. Fall back to blob: for plain local use.
+// Deliver the finished PDF. The claude.ai artifact viewer blocks every plain
+// browser download (blob: AND data: links, doc.save()), so inside it we must
+// hand the file to the host through the granted `downloads` capability. When
+// that capability isn't present (the app opened as a normal/local web page) we
+// fall back to an automatic download plus an on-page link.
+async function deliverPdf(doc, fname) {
+  let blob = null;
+  try { blob = doc.output("blob"); } catch (e) { /* fall through to url paths */ }
+
+  // 1) Artifact viewer: the platform-mediated save (only way out of the sandbox)
+  if (blob && window.claude && typeof window.claude.use === "function") {
+    let downloads = null;
+    try { downloads = await window.claude.use("downloads"); } catch (e) { downloads = null; }
+    if (downloads && typeof downloads.save === "function") {
+      try {
+        await downloads.save({ filename: fname, data: blob });
+        setPdfStatus("Saved “" + fname + "”. Check your browser downloads.", false);
+        return;
+      } catch (err) {
+        const code = err && err.code;
+        if (code === "declined") { setPdfStatus("Download cancelled — click “Download PDF report” to try again.", false); return; }
+        // any other capability error: fall through to the link fallback
+      }
+    }
+  }
+
+  // 2) Normal / local browser: auto-download + a clickable link fallback
   let dataUri = null, blobUrl = null;
   try { dataUri = doc.output("datauristring", { filename: fname }); } catch (e) { /* fall through */ }
   try { blobUrl = doc.output("bloburl"); } catch (e) { /* fall through */ }
   const linkUrl = dataUri || blobUrl;
   if (linkUrl) showPdfLink(linkUrl, fname);
   else setPdfStatus("The report was built but this view blocked opening it. Open this app in its own browser tab, or open the HTML file locally, and try again.", true);
-  // best-effort automatic download (works outside the sandbox)
   try { doc.save(fname); } catch (e) { /* blocked — the link above still works */ }
 }
 
