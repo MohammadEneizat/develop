@@ -127,6 +127,17 @@ full 52.8 MW grid limit.
   active or reactive terms are flagged, and Goal Seek solves the feasible
   power-factor band at that count (or reports the minimum viable count when
   none exists).
+- **Inverter regulated voltage** — an optional control for the inverter's own
+  AC terminal voltage. Left blank, the capability table is read at the
+  connection-point voltage being assessed (a conservative single-voltage
+  screen). Set it (e.g. 1.00 p.u.) when the inverter bus is held by the MV/LV
+  transformer and the main transformer's on-load tap changer, so the reactive
+  capability is read at the inverter terminals rather than derated by a
+  depressed POI voltage — as a detailed load-flow (PowerFactory) models it.
+  This is the knob that reconciles the screening count with a detailed study:
+  for the Infraleuna 48 MW / VDE-AR-N 4110 case, blank gives 164 inverters
+  while **0.97 p.u. gives 160, matching the PowerFactory result** (the 0.95 p.u.
+  export corner is the binding constraint).
 - **Capacitor bank corrected** — a capacitor bank now *reduces* the reactive
   power the inverters must supply (the worksheet added it to the demand).
 - **Validation** — a live pass/fail grid-delivery check, plus an over-sizing

@@ -564,6 +564,10 @@
           <div class="inwrap"><input id="invKVA" type="number" step="any" min="1" value="363"><span class="unit">kVA</span></div>
         </div>
         <div class="field">
+          <label for="invVreg">Inverter regulated voltage</label>
+          <div class="inwrap"><input id="invVreg" type="number" step="0.01" min="0.8" max="1.15" placeholder="follows POI"><span class="unit">p.u.</span></div>
+        </div>
+        <div class="field">
           <label for="invCount">Number of inverters</label>
           <div class="inwrap"><input id="invCount" type="number" step="1" min="0" placeholder="recommended"><span class="unit">nos.</span></div>
         </div>
@@ -576,6 +580,7 @@
           <div class="inwrap"><input id="capBank" type="number" step="any" min="0" value="0"><span class="unit">MVAr</span></div>
         </div>
       </div>
+      <div class="note"><b>Inverter regulated voltage</b> — leave blank to read the capability table at the connection-point voltage being assessed (the conservative single-voltage screen). If the inverters are regulated to a fixed AC terminal voltage by the MV/LV transformer and the main transformer's on-load tap changer — as a detailed load-flow (e.g. PowerFactory) models — set that voltage (e.g. 1.00 p.u.) so the reactive capability is read at the inverter terminals, not derated by the POI voltage. Lowering it toward the POI voltage makes the result more conservative; tune it to reconcile the screening count with a detailed study.</div>
       <div class="note" id="qOvrNote" hidden></div>
       <div class="derived">
         <div class="chip"><span class="k">Recommended count (P + Q)</span><span class="v" id="outNReq">—<small>nos.</small></span></div>
@@ -1117,6 +1122,7 @@ const DEFAULTS = {
   xmerMargin: 10,
   gridCode: { preset: "gb_g99", qMaxPu: 0.329, pfReq: 0.95, pMin: 20, pFull: 20, vFullLo: 0.95, vFullHi: 1.05, vZeroLo: 0.90, vZeroHi: 1.10, vqAsym: true, leadRelief: true },
   invKVA: 231,
+  invVreg: null,
   capBank: 0,
   invCountOverride: null,
   invQOverride: null,
@@ -1358,12 +1364,18 @@ function gcVqFactor(gc, V, dir = "lag") {
    capability THERE is returned, with curtailedP set and p_used (kW) telling
    what active power the inverter actually runs. */
 function invQCapAt(s, r, p_d, V) {
+  // The inverter's reactive capability depends on its own AC terminal voltage.
+  // When a regulated voltage is set, read the capability there instead of the
+  // POI voltage being assessed (the OLTC / MV-LV transformer holds the inverter
+  // bus, so it is not derated by a depressed connection-point voltage).
+  const vr = num(s.invVreg);
+  const Vcap = vr > 0 ? vr : V;
   if (r.pqActive) {
     const pPu = r.S_inv > 0 ? p_d / r.S_inv : 0;
-    const c = qCapClamped(s.pq, V, pPu);
+    const c = qCapClamped(s.pq, Vcap, pPu);
     return { q: c.pct / 100 * r.S_inv, p_used: c.pUsed * r.S_inv, curtailedP: c.curtailedP };
   }
-  const S_v = r.S_eff * Math.min(V, 1);
+  const S_v = r.S_eff * Math.min(Vcap, 1);
   if (p_d > S_v + 1e-9) return { q: 0, p_used: S_v, curtailedP: true };
   const circ = Math.sqrt(Math.max(0, S_v * S_v - p_d * p_d));
   return { q: r.qOvr ? Math.min(num(s.invQOverride), circ) : circ, p_used: p_d, curtailedP: false };
@@ -2280,6 +2292,12 @@ invCountInput.addEventListener("input", () => {
   update();
 });
 
+const invVregInput = document.getElementById("invVreg");
+invVregInput.addEventListener("input", () => {
+  state.invVreg = invVregInput.value === "" ? null : num(invVregInput.value);
+  update();
+});
+
 document.getElementById("addXmer").addEventListener("click", () => {
   state.xmers.push({ name: `Transformer group ${state.xmers.length + 1}`, qty: 1, rating: 1000, z: 6 });
   renderXmerRows(); update();
@@ -2561,14 +2579,18 @@ function buildPdf(imgs) {
     "Table 4 — Internal system losses applied to the grid injection limit.",
     { columnStyles: rightCols([1, 2]), foot: [["Total", "", n(r.lossSum, 3)]] });
   h3("2.4   Inverter");
-  table(["Parameter", "Value", "Unit"], [
-    ["Apparent power rating", n(r.S_inv, 0), "kVA"],
-    ["Dispatched active power per inverter", n(r.p_inv, 1), "kW"],
-    ["Equivalent power factor at dispatch", n(r.pf_inv, 3), "cos phi"],
-    ["Reactive capability per inverter", n(r.q_inv, 1), "kVAr"],
-    ["Capacitor bank", n(r.Q_capbank), "MVAr"],
-    ["Inverter count", r.manualN ? `Fixed at ${r.N} (recommended ${r.N_req})` : `Recommended: ${r.N}`, ""],
-  ], "Table 5 — Inverter and compensation parameters.", { columnStyles: rightCols([1], { cellWidth: 32 }) });
+  {
+    const invRows = [
+      ["Apparent power rating", n(r.S_inv, 0), "kVA"],
+      ["Dispatched active power per inverter", n(r.p_inv, 1), "kW"],
+      ["Equivalent power factor at dispatch", n(r.pf_inv, 3), "cos phi"],
+      ["Reactive capability per inverter", n(r.q_inv, 1), "kVAr"],
+    ];
+    if (num(state.invVreg) > 0) invRows.push(["Inverter regulated terminal voltage", n(num(state.invVreg), 2), "p.u."]);
+    invRows.push(["Capacitor bank", n(r.Q_capbank), "MVAr"]);
+    invRows.push(["Inverter count", r.manualN ? `Fixed at ${r.N} (recommended ${r.N_req})` : `Recommended: ${r.N}`, ""]);
+    table(["Parameter", "Value", "Unit"], invRows, "Table 5 — Inverter and compensation parameters.", { columnStyles: rightCols([1], { cellWidth: 32 }) });
+  }
   if (r.pqActive) {
     const head = ["V \\ P (p.u.)", ...state.pq.pLevels.map(p => p.toFixed(1))];
     const rows = [...state.pq.rows].sort((a, b) => num(b.v) - num(a.v)).map(row =>
@@ -2723,6 +2745,7 @@ function initAll() {
   fillGCInputs();
   document.getElementById("invCount").value = state.invCountOverride ?? "";
   document.getElementById("invQ").value = state.invQOverride ?? "";
+  document.getElementById("invVreg").value = state.invVreg ?? "";
   document.getElementById("pqUse").checked = !!state.pq.use;
   renderPQTable();
   renderXmerRows();
